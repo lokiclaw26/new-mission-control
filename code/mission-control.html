@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NofiTech Mission Control v1.15.0 — Operational Live Monitor</title>
+<title>Mission Control — NofiTech</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛰️</text></svg>">
 <style>
   :root {
     --bg: #0e1116;
@@ -221,14 +222,14 @@
   /* ---------- Summary cards (Overview) ---------- */
   .summary-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
   }
   .summary-card {
     background: var(--panel-2);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 16px;
+    padding: 10px 12px;
     text-align: center;
   }
   .summary-label {
@@ -239,7 +240,7 @@
     margin-bottom: 6px;
   }
   .summary-value {
-    font-size: 2em;
+    font-size: 1.6em;
     font-weight: 600;
     line-height: 1.1;
     word-break: break-word;
@@ -575,8 +576,45 @@
 
   /* MC-KANBAN-MOVE-1: Kanban CSS moved to /kanban (kanban.html) */
 
-  /* ---------- Badges (kept for tables) ---------- */
+  /* ---------- MC-UI-POLISH-1: "On this page" section nav in the sidebar ---------- */
+  .page-nav {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .page-nav .page-nav-title {
+    padding: 2px 16px 4px 16px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text3);
+  }
+  .page-nav a {
+    display: block;
+    padding: 4px 16px 4px 19px;
+    font-size: 12px;
+    color: var(--text2);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+  }
+  .page-nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .page-nav a.current { color: var(--cyan); border-left-color: var(--cyan); }
+
+  /* MC-UI-POLISH-1: live mini-stats in the sidebar footer */
+  .sidebar-stats {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--line, #333);
+    font-size: 11px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+  .sidebar-stats .stat-num { color: var(--text); font-weight: 600; }
+  .sidebar-stats .stat-num.green { color: var(--green); }
+  .sidebar-stats .stat-num.amber { color: var(--amber); }
+  .sidebar-stats .stat-num.red   { color: var(--red); }
 </style>
+<link rel="stylesheet" href="/static/common.css">
 </head>
 <body>
 
@@ -586,8 +624,21 @@
     <a href="/" class="nav-tab active">⚡ Main</a>
     <a href="/kanban" class="nav-tab">🗂 Kanban</a>
     <a href="/memory-graph" class="nav-tab">🧠 Memory Graph</a>
+    <div class="page-nav" id="page-nav">
+      <div class="page-nav-title">On this page</div>
+      <a href="#sec-overview">Overview</a>
+      <a href="#sec-agents">Agents</a>
+      <a href="#sec-action">Action Required</a>
+      <a href="#sec-tasks">Tasks</a>
+      <a href="#sec-projects">Projects</a>
+      <a href="#sec-logs">Logs / Health</a>
+      <a href="#sec-warnings">Warnings</a>
+      <a href="#sec-orders">Pending Orders</a>
+      <a href="#sec-github">GitHub</a>
+    </div>
   </nav>
   <div class="sidebar-footer">
+    <div class="sidebar-stats" id="sidebar-stats" title="Live counts (auto-refresh)">loading…</div>
     <div class="sidebar-clock" id="sidebar-clock" title="Live Dubai time (UTC+4) — source of truth for all task timestamps">
       <div class="clock-time" id="clock-time">--:--:--</div>
       <div class="clock-date" id="clock-date">— —</div>
@@ -620,37 +671,36 @@
 
 <div class="topbar-meta" style="display:flex;justify-content:space-between;align-items:center;margin:-8px 0 12px 0;padding:0 4px">
   <span class="last-refreshed" id="last-refreshed">Last refreshed: never · auto-refresh: 5s</span>
-  <span class="last-refreshed" id="version-subtitle" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">v—</span>
 </div>
 
-<div class="lan-warning" id="lan-warning">⚠ <strong>Local/LAN use only.</strong> This dashboard has no authentication in v1. Do not expose to the public internet. Intended for trusted networks (home/lab).</div>
+<div class="lan-warning" id="lan-warning">⚠ <strong>Local/LAN use only.</strong> This dashboard has no authentication in v1. Do not expose to the public internet. Intended for trusted networks (home/lab).<button type="button" class="lan-dismiss" onclick="dismissLanWarning()" title="Hide this notice (stays hidden on this browser)">✕</button></div>
 
 <!-- ========== 1. Overview ========== -->
-<section>
+<section id="sec-overview">
   <h2><span class="num">1.</span> Overview <span class="hint" id="overview-hint">6 metrics</span></h2>
   <div class="body"><div id="overview" class="summary-grid"></div></div>
 </section>
 
 <!-- ========== 2. Agents ========== -->
-<section>
+<section id="sec-agents">
   <h2><span class="num">2.</span> Agents <span class="hint">3 cards</span></h2>
   <div class="body"><div id="agents" class="agent-grid"></div></div>
 </section>
 
 <!-- ========== 2b. Action Required (NEW) ========== -->
-<section>
+<section id="sec-action">
   <h2><span class="num">3.</span> Action Required <span class="hint" id="action-hint">scanning…</span></h2>
   <div class="body"><div id="action" class="action-panel"></div></div>
 </section>
 
 <!-- ========== 3. Tasks ========== -->
-<section>
+<section id="sec-tasks">
   <h2><span class="num">4.</span> Tasks <span class="hint" id="tasks-hint">real only</span></h2>
   <div class="body"><div id="tasks"></div></div>
 </section>
 
 <!-- ========== 4. Projects ========== -->
-<section>
+<section id="sec-projects">
   <h2><span class="num">5.</span> Projects <span class="hint" id="projects-hint">…</span></h2>
   <div class="body"><div id="projects"></div></div>
 </section>
@@ -661,19 +711,19 @@
      itself is no longer rendered. No panel render call in loadAll(). -->
 
 <!-- ========== 6. Logs / Health ========== -->
-<section>
+<section id="sec-logs">
   <h2><span class="num">6.</span> Logs / Health <span class="hint" id="logs-hint">…</span></h2>
   <div class="body"><div id="logs"></div></div>
 </section>
 
 <!-- ========== 6b. Warnings (NEW at Stage 17) ========== -->
-<section>
+<section id="sec-warnings">
   <h2><span class="num">7.</span> Warnings <span class="hint" id="warnings-hint">…</span></h2>
   <div class="body"><div id="warnings" class="action-panel"></div></div>
 </section>
 
 <!-- ========== 8. Pending Orders (NEW at Stage 19) ========== -->
-<section>
+<section id="sec-orders">
   <h2><span class="num">8.</span> Pending Orders <span class="hint" id="orders-hint">…</span></h2>
   <div class="body">
     <div id="orders-banner" class="orders-banner">
@@ -685,7 +735,7 @@
 </section>
 
 <!-- ========== 9. GitHub Connection (NEW at Stage 20) ========== -->
-<section>
+<section id="sec-github">
   <h2><span class="num">9.</span> GitHub Connection <span class="hint" id="github-hint">live</span></h2>
   <div class="body">
     <div id="github" class="summary-grid"></div>
@@ -1140,7 +1190,9 @@ function renderLogs(d) {
     ? `<span class="muted">no env vars tracked</span>`
     : envKeys.map(k => {
         const status = env[k];
-        const cls = status === "configured" ? "green" : status === "missing" ? "red" : "amber";
+        // MC-UI-POLISH-1: "missing" is a not-configured state, not a failure —
+        // amber, so red stays reserved for things that are actually broken.
+        const cls = status === "configured" ? "green" : "amber";
         return `<div style="display:flex;gap:8px;align-items:center;margin:3px 0">
           <span class="ts" style="min-width:240px">${esc(k)}</span>
           ${badge(status, cls)}
@@ -1568,6 +1620,8 @@ async function loadAll() {
   renderOrders(results.orders || {});
   // Stage 20: GitHub Connection panel — reads /api/data/github
   renderGitHub(results.github || {});
+  // MC-UI-POLISH-1: sidebar mini-stats (same payloads, no extra fetch)
+  updateSidebarStats(results.overview || {}, results.logs || {});
 
   refreshTasksCounts().then(() => {
     if (results.tasks) renderTasks(results.tasks);
@@ -1605,6 +1659,64 @@ async function loadAll() {
 
 // 10. Kanban — Multi-Agent Board removed in MC-KANBAN-MOVE-1 (2026-06-16).
 // See kanban.html for the standalone page; this file now only renders the main view.
+
+// ============================================================
+// MC-UI-POLISH-1 (2026-07-09): banner dismiss, scroll-spy, sidebar stats
+// ============================================================
+
+// Dismissible LAN banner — hidden per-browser via localStorage.
+function dismissLanWarning() {
+  try { localStorage.setItem("mc_lan_banner_dismissed", "1"); } catch {}
+  document.body.classList.add("lan-dismissed");
+}
+(function restoreLanDismiss() {
+  try {
+    if (localStorage.getItem("mc_lan_banner_dismissed") === "1") {
+      document.body.classList.add("lan-dismissed");
+    }
+  } catch {}
+})();
+
+// Scroll-spy: highlight the section currently in view in the sidebar
+// "On this page" nav. IntersectionObserver, no scroll-handler jank.
+(function wirePageNav() {
+  const nav = document.getElementById("page-nav");
+  if (!nav || !("IntersectionObserver" in window)) return;
+  const links = new Map();  // section id -> <a>
+  for (const a of nav.querySelectorAll("a[href^='#']")) {
+    links.set(a.getAttribute("href").slice(1), a);
+  }
+  let currentId = null;
+  const io = new IntersectionObserver((entries) => {
+    // Pick the topmost visible section.
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    if (visible.length === 0) return;
+    const id = visible[0].target.id;
+    if (id === currentId) return;
+    currentId = id;
+    for (const [sid, a] of links) a.classList.toggle("current", sid === id);
+  }, { rootMargin: "-80px 0px -60% 0px" });
+  for (const sid of links.keys()) {
+    const sec = document.getElementById(sid);
+    if (sec) io.observe(sec);
+  }
+})();
+
+// Live mini-stats in the sidebar footer — fed from the same overview
+// payload loadAll() already fetches (see updateSidebarStats call there).
+function updateSidebarStats(overview, logs) {
+  const el = document.getElementById("sidebar-stats");
+  if (!el) return;
+  const at = overview?.active_tasks?.value;
+  const ft = overview?.failed_tasks?.value;
+  const w  = overview?.warnings?.value;
+  const num = (v, cls) =>
+    `<span class="stat-num ${v > 0 ? cls : ''}">${(v === null || v === undefined) ? '—' : v}</span>`;
+  el.innerHTML =
+    `⚙ ${num(at, 'green')} active · ⚠ ${num(w, 'amber')} warn<br>` +
+    `✗ ${num(ft, 'red')} failed · 🩺 <span class="stat-num ${ (logs?.app_health === 'ok') ? 'green' : 'amber' }">${esc(logs?.app_health || '—')}</span>`;
+}
 
 // Wire up the Token button on the main page
 (function wireTokenBtn() {

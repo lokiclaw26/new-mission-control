@@ -87,7 +87,7 @@ START_TIME = time.time()
 
 # v1.10.0 — live version: read from git at request time (no restart needed).
 # Fallback to manual values if git is unavailable or this is a fresh checkout.
-FALLBACK_VERSION = "1.16.0"  # MC-RESULT-IMAGES-1: /api/file endpoint + result assets
+FALLBACK_VERSION = "1.18.0"  # MC-UI-POLISH-1: shared theme, mobile layout, kanban/graph polish
 FALLBACK_COMMIT = "live"
 
 def _git(*args):
@@ -2602,6 +2602,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if ".." in rel.split("/") or rel.startswith("/"):
                     return self._json({"error": "bad path", "path": path}, 400)
                 return self._static("vendor/" + rel)
+
+            # MC-UI-POLISH-1 (2026-07-09): shared static assets (common.css)
+            # used by all three pages. Same containment rules as /vendor/.
+            if path.startswith("/static/"):
+                rel = path[len("/static/"):]
+                if ".." in rel.split("/") or rel.startswith("/"):
+                    return self._json({"error": "bad path", "path": path}, 400)
+                return self._static("static/" + rel)
 
             if path == "/api/memory-graph" or path == "/api/memory-graph/":
                 status, payload = _mg_api.get_graph(self)

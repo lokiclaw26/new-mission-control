@@ -4,115 +4,128 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Memory Graph — Mission Control</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0a0a0a; color: #e0e0e0; font-family: -apple-system, system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
-  .sidebar { width: 180px; background: #111; border-right: 1px solid #2a2a2a; flex-shrink: 0; padding-top: 16px; }
-  .sidebar-header { color: #d4af37; font-weight: bold; padding: 8px 16px; font-size: 14px; letter-spacing: 0.5px; }
-  .sidebar a { display: block; padding: 10px 16px; color: #b8b8b8; text-decoration: none; font-size: 13px; border-left: 3px solid transparent; transition: all 0.15s; }
-  .sidebar a:hover { background: #1a1a1a; color: #e0e0e0; }
-  .sidebar a.active { color: #d4af37; border-left-color: #d4af37; background: rgba(212, 175, 55, 0.08); }
-  .sidebar-footer { position: absolute; bottom: 12px; left: 16px; right: 16px; font-size: 11px; color: #555; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+  /* MC-UI-POLISH-1: sidebar matches the Main/Kanban pages (shared markup +
+     common.css handles the small-screen top-bar collapse). */
+  .sidebar { width: 180px; background: var(--panel); border-right: 1px solid var(--line); flex-shrink: 0; padding: 16px 0; display: flex; flex-direction: column; }
+  .sidebar-header { color: var(--text); font-weight: bold; padding: 8px 16px; font-size: 16px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .sidebar nav { flex: 1; }
+  .nav-tab { display: block; padding: 10px 16px; color: var(--text2); text-decoration: none; font-size: 13px; border-left: 3px solid transparent; transition: all 0.15s; }
+  .nav-tab:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .nav-tab.active { color: var(--text); border-left-color: var(--thor-color); background: rgba(255,255,255,0.08); }
+  .sidebar-footer { padding: 8px 16px; font-size: 11px; color: var(--text3); border-top: 1px solid var(--line); }
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  header { background: #111; padding: 12px 20px; border-bottom: 1px solid #2a2a2a; display: flex; align-items: center; justify-content: space-between; }
-  header h1 { font-size: 18px; color: #e0e0e0; font-weight: 600; }
-  header h1 .subtitle { color: #888; font-size: 13px; font-weight: normal; margin-left: 12px; }
-  .connection-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #888; }
-  .connection-status .dot { width: 10px; height: 10px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
-  .connection-status .dot.error { background: #e74c3c; box-shadow: 0 0 6px #e74c3c; }
-  .hamburger { display: none; background: transparent; border: 1px solid #2a2a2a; color: #d4af37; padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 16px; line-height: 1; }
-  .hamburger:hover { background: #1a1a1a; }
+  header { background: var(--panel); padding: 12px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; color: var(--text); font-weight: 600; }
+  header h1 .subtitle { color: var(--text2); font-size: 13px; font-weight: normal; margin-left: 12px; }
+  .connection-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
+  .connection-status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .connection-status .dot.error { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .hamburger { display: none; background: transparent; border: 1px solid var(--line); color: var(--cyan); padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 16px; line-height: 1; }
+  .hamburger:hover { background: var(--panel-2); }
   .layout { flex: 1; display: flex; min-height: 0; }
-  .controls { width: 300px; background: #111; border-right: 1px solid #2a2a2a; padding: 16px; overflow-y: auto; flex-shrink: 0; }
-  .controls h3 { font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 8px; letter-spacing: 1px; }
-  .controls input[type="text"] { width: 100%; padding: 8px 10px; background: #0a0a0a; border: 1px solid #2a2a2a; color: #e0e0e0; border-radius: 3px; font-size: 13px; margin-bottom: 16px; }
-  .controls fieldset { border: 1px solid #2a2a2a; border-radius: 4px; padding: 10px; margin-bottom: 16px; }
-  .controls fieldset legend { color: #888; font-size: 11px; text-transform: uppercase; padding: 0 6px; }
+  .controls { width: 300px; background: var(--panel); border-right: 1px solid var(--line); padding: 16px; overflow-y: auto; flex-shrink: 0; }
+  .controls h3 { font-size: 12px; text-transform: uppercase; color: var(--text2); margin-bottom: 8px; letter-spacing: 1px; }
+  .controls input[type="text"] { width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 3px; font-size: 13px; margin-bottom: 16px; }
+  .controls fieldset { border: 1px solid var(--line); border-radius: 4px; padding: 10px; margin-bottom: 16px; }
+  .controls fieldset legend { color: var(--text2); font-size: 11px; text-transform: uppercase; padding: 0 6px; }
   .controls label { display: block; font-size: 13px; padding: 3px 0; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-  .controls label input[type="checkbox"] { accent-color: #d4af37; }
+  .controls label input[type="checkbox"] { accent-color: var(--cyan); }
   .controls .kind-color { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
   .controls .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
-  .controls input[type="range"] { flex: 1; accent-color: #d4af37; }
-  .controls button { width: 100%; padding: 8px; background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 3px; cursor: pointer; font-size: 12px; margin-top: 8px; }
+  .controls input[type="range"] { flex: 1; accent-color: var(--cyan); }
+  .controls button { width: 100%; padding: 8px; background: rgba(231, 76, 60, 0.2); color: var(--red); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 3px; cursor: pointer; font-size: 12px; margin-top: 8px; }
   .controls button:hover { background: rgba(231, 76, 60, 0.3); }
-  .graph-container { flex: 1; position: relative; background: #0a0a0a; min-width: 0; }
+  .graph-container { flex: 1; position: relative; background: var(--bg); min-width: 0; }
   #graph { position: absolute; inset: 0; }
-  .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #888; font-size: 14px; font-style: italic; background: rgba(10,10,10,0.85); z-index: 10; pointer-events: none; }
-  .right-panel { width: 350px; background: #111; border-left: 1px solid #2a2a2a; display: flex; flex-direction: column; flex-shrink: 0; }
-  .right-panel section { padding: 12px 16px; border-bottom: 1px solid #2a2a2a; }
-  .right-panel h3 { font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 8px; letter-spacing: 1px; }
+  .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text2); font-size: 14px; font-style: italic; background: rgba(10,10,10,0.85); z-index: 10; pointer-events: none; }
+  .right-panel { width: 350px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; }
+  .right-panel section { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .right-panel h3 { font-size: 12px; text-transform: uppercase; color: var(--text2); margin-bottom: 8px; letter-spacing: 1px; }
   .event-feed { flex: 1; overflow-y: auto; max-height: 35%; }
   .event-feed ul { list-style: none; padding: 0; }
-  .event-feed li { padding: 5px 0; font-size: 11px; color: #b8b8b8; font-family: monospace; border-bottom: 1px solid #1a1a1a; }
-  .event-feed li .ev-type { color: #d4af37; }
+  .event-feed li { padding: 5px 0; font-size: 11px; color: var(--text2); font-family: monospace; border-bottom: 1px solid var(--panel-2); }
+  .event-feed li .ev-type { color: var(--cyan); }
   .inspector { flex: 1; overflow-y: auto; }
-  .inspector h2 { font-size: 16px; color: #d4af37; margin-bottom: 6px; word-break: break-word; }
-  .inspector .insp-id { font-family: monospace; font-size: 11px; color: #888; margin-bottom: 10px; word-break: break-all; }
+  .inspector h2 { font-size: 16px; color: var(--cyan); margin-bottom: 6px; word-break: break-word; }
+  .inspector .insp-id { font-family: monospace; font-size: 11px; color: var(--text2); margin-bottom: 10px; word-break: break-all; }
   .inspector .insp-kind { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-bottom: 10px; color: #fff; text-transform: uppercase; letter-spacing: 0.5px; }
-  .inspector .insp-summary { font-size: 13px; color: #b8b8b8; margin-bottom: 12px; line-height: 1.4; word-break: break-word; }
-  .inspector .insp-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #1a1a1a; }
-  .inspector .insp-row .label { color: #888; }
-  .inspector .insp-row .value { color: #e0e0e0; font-family: monospace; }
+  .inspector .insp-summary { font-size: 13px; color: var(--text2); margin-bottom: 12px; line-height: 1.4; word-break: break-word; }
+  .inspector .insp-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--panel-2); }
+  .inspector .insp-row .label { color: var(--text2); }
+  .inspector .insp-row .value { color: var(--text); font-family: monospace; }
   .inspector .insp-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
-  .inspector .insp-tag { background: #1a1a1a; border: 1px solid #2a2a2a; padding: 2px 8px; border-radius: 10px; font-size: 10px; color: #b8b8b8; }
-  .inspector .insp-section-title { font-size: 11px; text-transform: uppercase; color: #888; margin-top: 12px; margin-bottom: 4px; letter-spacing: 0.5px; }
-  .inspector .insp-source { font-family: monospace; font-size: 10px; color: #555; word-break: break-all; }
-  footer { background: #111; padding: 8px 20px; border-top: 1px solid #2a2a2a; display: flex; gap: 24px; font-size: 11px; color: #888; flex-wrap: wrap; }
+  .inspector .insp-tag { background: var(--panel-2); border: 1px solid var(--line); padding: 2px 8px; border-radius: 10px; font-size: 10px; color: var(--text2); }
+  .inspector .insp-section-title { font-size: 11px; text-transform: uppercase; color: var(--text2); margin-top: 12px; margin-bottom: 4px; letter-spacing: 0.5px; }
+  .inspector .insp-source { font-family: monospace; font-size: 10px; color: var(--text3); word-break: break-all; }
+  footer { background: var(--panel); padding: 8px 20px; border-top: 1px solid var(--line); display: flex; gap: 24px; font-size: 11px; color: var(--text2); flex-wrap: wrap; }
   footer .metric { display: flex; align-items: center; gap: 6px; }
-  footer .metric strong { color: #d4af37; }
-  footer .metric .total { color: #555; }
-  .empty { color: #555; font-style: italic; font-size: 12px; }
+  footer .metric strong { color: var(--cyan); }
+  footer .metric .total { color: var(--text3); }
+  .empty { color: var(--text3); font-style: italic; font-size: 12px; }
   /* MC-MEMORY-GRAPH-4-GLOBAL (2026-06-17): scope banner. */
-  .scope-banner { padding: 8px 20px; background: #1a1a0a; border-bottom: 1px solid #2a2a2a; color: #d4af37; font-size: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .scope-banner { padding: 8px 20px; background: var(--panel-2); border-bottom: 1px solid var(--line); color: var(--cyan); font-size: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .scope-banner .scope-label { font-weight: 600; }
-  .scope-banner .scope-stats { color: #888; font-family: monospace; font-size: 11px; }
+  .scope-banner .scope-stats { color: var(--text2); font-family: monospace; font-size: 11px; }
   /* MC-LIVE-MEMORY-GRAPH-1 (2026-06-19): live top-corner count badge. */
   .live-count {
     position: fixed; top: 12px; right: 12px; z-index: 50;
-    background: rgba(20,20,20,0.92); color: #d4af37;
-    border: 1px solid #2a2a2a; border-radius: 4px;
+    background: rgba(20,20,20,0.92); color: var(--cyan);
+    border: 1px solid var(--line); border-radius: 4px;
     padding: 6px 10px; font-size: 12px; font-family: monospace;
     display: flex; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   }
-  .live-count .lbl { color: #888; font-weight: normal; }
-  .live-count .num { color: #d4af37; font-weight: bold; }
-  .live-count .pulse { color: #2ecc71; }
-  .live-count .stale { color: #e74c3c; }
+  .live-count .lbl { color: var(--text2); font-weight: normal; }
+  .live-count .num { color: var(--cyan); font-weight: bold; }
+  .live-count .pulse { color: var(--green); }
+  .live-count .stale { color: var(--red); }
   /* MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): small banner that names the
      currently-shining node. Sits under the live-count chip. */
   .shine-banner {
     position: fixed; top: 50px; right: 12px; z-index: 50;
     background: rgba(20,20,20,0.92);
-    border: 1px solid #2a2a2a; border-radius: 4px;
+    border: 1px solid var(--line); border-radius: 4px;
     padding: 6px 10px; font-size: 11px; font-family: monospace;
-    color: #d4af37; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    color: var(--cyan); box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     display: flex; gap: 8px; align-items: center; max-width: 320px;
   }
-  .shine-banner .shine-lbl { color: #d4af37; font-weight: bold; white-space: nowrap; }
-  .shine-banner .shine-id  { color: #888; word-break: break-all; }
+  .shine-banner .shine-lbl { color: var(--cyan); font-weight: bold; white-space: nowrap; }
+  .shine-banner .shine-id  { color: var(--text2); word-break: break-all; }
   .shine-banner.clickable  { cursor: pointer; transition: background 0.15s, border-color 0.15s; }
-  .shine-banner.clickable:hover { background: rgba(40,40,40,0.95); border-color: #d4af37; }
+  .shine-banner.clickable:hover { background: rgba(40,40,40,0.95); border-color: var(--cyan); }
   @media (max-width: 640px) {
     .shine-banner { top: 48px; right: 6px; max-width: 200px; font-size: 10px; }
   }
   .scope-banner.scope-mission-control { background: #0f1a1a; color: #4a9eff; }
-  .scope-banner.scope-project { background: #0f1a0f; color: #2ecc71; }
+  .scope-banner.scope-project { background: #0f1a0f; color: var(--green); }
   .scope-banner.scope-agent { background: #1a0f1a; color: #9b59b6; }
   .scope-banner.scope-kind { background: #1a140a; color: #ff9f43; }
-  .scope-banner.scope-session { background: #1a0f0f; color: #e74c3c; }
-  .controls select { width: 100%; padding: 6px 8px; background: #0a0a0a; border: 1px solid #2a2a2a; color: #e0e0e0; border-radius: 3px; font-size: 12px; margin-bottom: 8px; }
+  .scope-banner.scope-session { background: #1a0f0f; color: var(--red); }
+  .controls select { width: 100%; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 3px; font-size: 12px; margin-bottom: 8px; }
   .controls .filter-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; }
-  .controls .filter-row label { display: block; font-size: 11px; color: #888; margin-bottom: 2px; }
+  .controls .filter-row label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 2px; }
 
-  /* Responsive: tablet and below — collapse sidebar to top bar */
+  /* MC-UI-POLISH-1: the filters panel is a collapsible drawer on desktop so
+     the graph gets the space. State persisted per-browser (localStorage). */
+  .controls.collapsed { display: none; }
+  .filters-toggle {
+    background: transparent; border: 1px solid var(--line); color: var(--text2);
+    padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; line-height: 1;
+  }
+  .filters-toggle:hover, .filters-toggle.open { color: var(--cyan); border-color: var(--cyan); }
+
+  /* Responsive: tablet and below — sidebar becomes a top bar (common.css);
+     panels stack under the graph. */
   @media (max-width: 900px) {
     body { flex-direction: column; height: 100vh; }
-    .sidebar { display: none; }
     .hamburger { display: inline-block; }
     .layout { flex-direction: column; }
-    .controls { width: 100%; max-height: 200px; order: 2; border-right: none; border-top: 1px solid #2a2a2a; }
+    .controls { width: 100%; max-height: 200px; order: 2; border-right: none; border-top: 1px solid var(--line); }
     .graph-container { order: 1; min-height: 400px; }
-    .right-panel { width: 100%; max-height: 250px; order: 3; border-left: none; border-top: 1px solid #2a2a2a; }
+    .right-panel { width: 100%; max-height: 250px; order: 3; border-left: none; border-top: 1px solid var(--line); }
   }
   /* Responsive: phone — drawers hidden by default, toggled by hamburger */
   @media (max-width: 600px) {
@@ -123,14 +136,17 @@
     header h1 .subtitle { display: none; }
   }
 </style>
+<link rel="stylesheet" href="/static/common.css">
 </head>
 <body>
   <div class="sidebar">
     <div class="sidebar-header">⚡ NofiTech</div>
-    <a href="/">⚡ Main</a>
-    <a href="/kanban">🗂 Kanban</a>
-    <a href="/memory-graph" class="active">🧠 Memory Graph</a>
-    <div class="sidebar-footer" id="version">v1.17.0+3d</div>
+    <nav>
+      <a href="/" class="nav-tab">⚡ Main</a>
+      <a href="/kanban" class="nav-tab">🗂 Kanban</a>
+      <a href="/memory-graph" class="nav-tab active">🧠 Memory Graph</a>
+    </nav>
+    <div class="sidebar-footer" id="version">v1.18.0</div>
   </div>
   <div class="main">
     <!-- MC-LIVE-MEMORY-GRAPH-1 (2026-06-19): live top-corner count. -->
@@ -152,6 +168,7 @@
       <div class="connection-status">
         <span class="dot" id="conn-dot"></span>
         <span id="conn-text">polling 5s</span>
+        <button class="filters-toggle" id="filters-toggle" aria-label="Toggle filters panel" title="Show / hide scope, search and kind filters">⚙ Filters</button>
         <button class="hamburger" id="hamburger" aria-label="Toggle panels">☰</button>
       </div>
     </header>
@@ -956,7 +973,7 @@
         return;
       }
       Graph = ForceGraph3D()(document.getElementById('graph'))
-        .backgroundColor('#0a0a0a')
+        .backgroundColor('#0e1116')
         .nodeId('id')
         .nodeLabel(n => n.label || n.id || '?')
         .nodeColor(n => {
@@ -1035,6 +1052,28 @@
       if (c) c.classList.toggle('open');
       if (r) r.classList.toggle('open');
     });
+
+    // MC-UI-POLISH-1: filters drawer (desktop). Collapsed by default so the
+    // graph gets the space; state persists per-browser.
+    (function wireFiltersToggle() {
+      const btn = document.getElementById('filters-toggle');
+      const panel = document.querySelector('.controls');
+      if (!btn || !panel) return;
+      let open = false;
+      try { open = localStorage.getItem('mg_filters_open') === '1'; } catch (e) {}
+      function apply() {
+        panel.classList.toggle('collapsed', !open);
+        btn.classList.toggle('open', open);
+        // Re-measure the 3D canvas now that the layout width changed.
+        try { setGraphSize(); } catch (e) {}
+      }
+      btn.addEventListener('click', () => {
+        open = !open;
+        try { localStorage.setItem('mg_filters_open', open ? '1' : '0'); } catch (e) {}
+        apply();
+      });
+      apply();
+    })();
 
     // Wire up filters
     document.getElementById('search').addEventListener('input', applyFilters);

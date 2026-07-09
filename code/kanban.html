@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kanban — NofiTech Mission Control v1.15.0</title>
+<title>Kanban — NofiTech Mission Control</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗂️</text></svg>">
 <!--
   MC-KANBAN-MOVE-1 (2026-06-16): Extracted from mission-control.html Section 10.
   Shared theme CSS is duplicated here (keep in sync with mission-control.html).
@@ -45,7 +46,8 @@
     margin: 0;
     display: flex;
     min-height: 100vh;
-    font-family: var(--font-mono, monospace);
+    /* MC-UI-POLISH-1: UI text is sans (inherited from html); mono is
+       reserved for task ids and other machine strings via --font-mono. */
   }
   body.detailed .tech-detail { display: inline; }
   body:not(.detailed) .tech-detail { display: none; }
@@ -427,6 +429,33 @@
   .kanban-card.drag-target { border-color: var(--cyan); }
   .kanban-col.drag-active { background: rgba(88, 166, 255, 0.04); }
 
+  /* MC-UI-POLISH-1: the status pill is redundant when it just repeats the
+     column the card sits in — hide it there. It still shows anywhere the
+     context doesn't already say the status. */
+  #kanban-col-triage .card-status-pill.status-triage,
+  #kanban-col-todo .card-status-pill.status-todo,
+  #kanban-col-ready .card-status-pill.status-ready,
+  #kanban-col-running_now .card-status-pill.status-running_now,
+  #kanban-col-blocked .card-status-pill.status-blocked,
+  #kanban-col-done .card-status-pill.status-done,
+  #kanban-col-archived .card-status-pill.status-archived { display: none; }
+
+  /* MC-UI-POLISH-1: Done column render cap toggle (header button) */
+  .kanban-col-header .done-cap-btn {
+    background: var(--bg); border: 1px solid var(--line);
+    color: var(--text2); font-size: 10px; padding: 2px 7px;
+    border-radius: 999px; cursor: pointer; font-family: inherit;
+    text-transform: none; letter-spacing: 0; font-weight: 400;
+    white-space: nowrap;
+  }
+  .kanban-col-header .done-cap-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+
+  /* MC-UI-POLISH-1: phone — near-full-width columns with swipe snapping */
+  @media (max-width: 700px) {
+    .kanban-board { scroll-snap-type: x mandatory; }
+    .kanban-col { flex: 0 0 82vw; min-width: 82vw; scroll-snap-align: start; max-height: 62vh; }
+  }
+
   /* ========== MC-KANBAN-ASSIGN-1: per-card assign actions ========== */
   .card-assign-actions {
     display: flex; gap: 4px; margin-bottom: 6px;
@@ -499,7 +528,7 @@
     cursor: pointer;
     width: 100%;
     text-align: center;
-    font-family: var(--font-mono, monospace);
+    font-family: inherit;
   }
   .result-button:hover {
     background: rgba(210, 153, 34, 0.22);
@@ -520,7 +549,7 @@
     padding: 4px 8px;
     border-radius: 3px;
     cursor: pointer;
-    font-family: var(--font-mono, monospace);
+    font-family: inherit;
     line-height: 1.4;
     transition: all 0.12s ease;
   }
@@ -802,6 +831,7 @@
     text-align: center;
   }
 </style>
+<link rel="stylesheet" href="/static/common.css">
 </head>
 <body>
 
@@ -813,7 +843,7 @@
     <a href="/kanban" class="nav-tab active">🗂 Kanban</a>
     <a href="/memory-graph" class="nav-tab">🧠 Memory Graph</a>
   </nav>
-  <div class="sidebar-footer">v1.17.0+memory</div>
+  <div class="sidebar-footer">v1.18.0</div>
 </aside>
 
 <main class="main-content">
@@ -826,7 +856,7 @@
     </div>
   </div>
 
-  <div class="lan-warning">⚠ <strong>Local/LAN use only.</strong> Writes (create/move/assign) require an <code>MC_ADMIN_TOKEN</code>. Click <strong>🔑 Token</strong> above to paste the same token the server is using. <strong>Never expose to the public internet.</strong></div>
+  <div class="lan-warning">⚠ <strong>Local/LAN use only.</strong> Writes (create/move/assign) require an <code>MC_ADMIN_TOKEN</code>. Click <strong>🔑 Token</strong> above to paste the same token the server is using. <strong>Never expose to the public internet.</strong><button type="button" class="lan-dismiss" onclick="dismissLanWarning()" title="Hide this notice (stays hidden on this browser)">✕</button></div>
 
   <!-- ========== Kanban (extracted from mission-control.html Section 10) ========== -->
   <section id="section-kanban">
@@ -908,6 +938,10 @@ let _kanbanState = null;   // last fetched board dict
 let _kanbanIncludeArchived = false;
 let _kanbanLanesByProfile = true;
 let _kanbanRecentDoneFirst = true;  // MC-KANBAN-DONE-VISIBLE-1 (2026-06-19): sort done DESC by created/updated so the most recent done card is on top
+// MC-UI-POLISH-1 (2026-07-09): the Done column accumulates 100+ cards — render
+// only the most recent few by default; a header button reveals the rest.
+const KANBAN_DONE_RENDER_CAP = 15;
+let _kanbanShowAllDone = false;
 let _kanbanSearch = "";
 let _kanbanPollTimer = null;
 let _kanbanDragTaskId = null;
@@ -1040,7 +1074,23 @@ function smartRenderKanban(d, forceRebuild) {
   const board = document.getElementById("kanban-board");
   if (!board) return;
   const search = _kanbanSearch.trim().toLowerCase();
-  const columns = d.columns || [];
+  // MC-UI-POLISH-1: sort + cap the Done column without mutating the fetched
+  // state (_kanbanState must keep the full list so "show all" can restore it).
+  const columns = (d.columns || []).map(c => {
+    if (c.id !== "done") return c;
+    let tasks = (c.tasks || []);
+    if (_kanbanRecentDoneFirst) {
+      tasks = tasks.slice().sort((a, b) => {
+        const ta = Date.parse(a.updated || a.created || "") || 0;
+        const tb = Date.parse(b.updated || b.created || "") || 0;
+        return tb - ta;
+      });
+    }
+    const hidden = (!_kanbanShowAllDone && tasks.length > KANBAN_DONE_RENDER_CAP)
+      ? tasks.length - KANBAN_DONE_RENDER_CAP : 0;
+    if (hidden > 0) tasks = tasks.slice(0, KANBAN_DONE_RENDER_CAP);
+    return { ...c, tasks, _doneHidden: hidden };
+  });
 
   // For full rebuild: drop all tracked cards so we re-create from scratch
   if (forceRebuild) {
@@ -1114,6 +1164,16 @@ function smartRenderKanban(d, forceRebuild) {
       if (countEl) countEl.textContent = col.count ?? 0;
       const labelEl = colEl.querySelector(".col-label");
       if (labelEl) labelEl.textContent = col.label || col.id;
+      // MC-UI-POLISH-1: keep the done-cap toggle label in sync
+      if (col.id === "done") {
+        const oldBtn = colEl.querySelector(".done-cap-btn");
+        if (oldBtn) oldBtn.remove();
+        const html = doneCapBtnHtml(col);
+        if (html) {
+          const addBtn = colEl.querySelector(".add-btn");
+          if (addBtn) addBtn.insertAdjacentHTML("beforebegin", html);
+        }
+      }
     }
 
     const entry = columnBodyByCol.get(col.id);
@@ -1312,6 +1372,16 @@ function cssEscapeAttr(s) {
   return String(s).replace(/"/g, '\\"');
 }
 
+function doneCapBtnHtml(col) {
+  // MC-UI-POLISH-1: Done-column render cap toggle. Only rendered for done.
+  if (col.id !== "done") return "";
+  const label = _kanbanShowAllDone
+    ? `recent ${KANBAN_DONE_RENDER_CAP}`
+    : (col._doneHidden > 0 ? `show all (+${col._doneHidden})` : "");
+  if (!label) return "";
+  return `<button type="button" class="done-cap-btn" title="Toggle between the ${KANBAN_DONE_RENDER_CAP} most recent done cards and the full list">${esc(label)}</button>`;
+}
+
 function renderKanbanColumnShell(col) {
   // Same structure as the old renderKanbanColumn, but built as a template
   // for the smart-render path. Lane bodies are filled in by the caller.
@@ -1319,6 +1389,7 @@ function renderKanbanColumnShell(col) {
     <div class="kanban-col-header">
       <span class="col-label">${esc(col.label)}</span>
       <span class="col-count">${col.count || 0}</span>
+      ${doneCapBtnHtml(col)}
       <button class="add-btn" title="Create task in ${esc(col.label)}">+</button>
     </div>
     <div class="kanban-col-body" data-col-id="${esc(col.id)}"></div>
@@ -1707,6 +1778,29 @@ function stopKanbanPolling() {
   const tokenBtn = document.getElementById("token-btn");
   if (tokenBtn) tokenBtn.addEventListener("click", promptForToken);
   updateTokenButton();
+
+  // MC-UI-POLISH-1: Done render-cap toggle (delegated — the button lives in
+  // a column header that the smart-diff renderer rebuilds).
+  const board = document.getElementById("kanban-board");
+  if (board) board.addEventListener("click", (e) => {
+    const btn = e.target.closest(".done-cap-btn");
+    if (!btn) return;
+    _kanbanShowAllDone = !_kanbanShowAllDone;
+    if (_kanbanState) renderKanban(_kanbanState);
+  });
+})();
+
+// MC-UI-POLISH-1: dismissible LAN banner (per-browser, localStorage)
+function dismissLanWarning() {
+  try { localStorage.setItem("mc_lan_banner_dismissed", "1"); } catch {}
+  document.body.classList.add("lan-dismissed");
+}
+(function restoreLanDismiss() {
+  try {
+    if (localStorage.getItem("mc_lan_banner_dismissed") === "1") {
+      document.body.classList.add("lan-dismissed");
+    }
+  } catch {}
 })();
 
 // Initial board fetch + 5s polling
