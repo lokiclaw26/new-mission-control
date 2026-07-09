@@ -1,0 +1,1666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NofiTech Mission Control v1.15.0 — Operational Live Monitor</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c232c;
+    --line: #30363d;
+    --line-soft: #21262d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #6e7681;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red:   #f85149;
+    --cyan:  #58a6ff;
+    --pink:  #f778ba;
+    --blue:  #58a6ff;
+    --yellow: #d29922;
+    /* MC-KANBAN-1: per-agent color tokens for the Kanban swimlanes */
+    --thor-color:  #d29922;  /* amber — CEO/Orchestrator */
+    --forge-color: #58a6ff;  /* cyan — Builder/Engineer */
+    --argus-color: #f778ba;  /* pink — QA/Tester */
+    --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  /* MC-KANBAN-MOVE-1: flex layout for fixed sidebar */
+  body {
+    display: flex;
+    min-height: 100vh;
+  }
+  .main-content {
+    margin-left: 180px;
+    padding: 16px 16px 24px 16px;
+    flex: 1;
+    min-width: 0;
+    max-width: calc(1280px + 180px);
+  }
+  body.detailed .tech-detail { display: inline; }
+  body:not(.detailed) .tech-detail { display: none; }
+
+  /* ---------- Sidebar (MC-KANBAN-MOVE-1) ---------- */
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: 180px;
+    background: var(--panel, #1a1a1a);
+    border-right: 1px solid var(--line, #333);
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+  }
+  .sidebar-header {
+    padding: 8px 16px;
+    font-weight: bold;
+    font-size: 16px;
+    border-bottom: 1px solid var(--line, #333);
+    margin-bottom: 12px;
+  }
+  .sidebar nav { flex: 1; }
+  .nav-tab {
+    display: block;
+    padding: 10px 16px;
+    color: var(--text2, #888);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+  }
+  .nav-tab:hover {
+    background: rgba(255,255,255,0.04);
+    color: var(--text, #eee);
+  }
+  .nav-tab.active {
+    color: var(--text, #eee);
+    background: rgba(255,255,255,0.08);
+    border-left-color: var(--thor-color, #ffd700);
+  }
+  .sidebar-footer {
+    padding: 8px 16px;
+    font-size: 11px;
+    color: var(--text3, #666);
+    border-top: 1px solid var(--line, #333);
+  }
+  /* MC-CLOCK-1: live Dubai clock, source of truth for all task timestamps */
+  .sidebar-clock {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--line, #333);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    line-height: 1.4;
+  }
+  .sidebar-clock .clock-time {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text, #eee);
+    letter-spacing: 0.5px;
+  }
+  .sidebar-clock .clock-date {
+    font-size: 10px;
+    color: var(--text2, #999);
+    margin-top: 2px;
+  }
+  .sidebar-clock .clock-tz {
+    font-size: 9px;
+    color: var(--text3, #666);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  /* Kanban quick-link card (MC-KANBAN-MOVE-1) */
+  .kanban-quicklink {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    margin: 0 0 12px 0;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--cyan);
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .kanban-quicklink:hover {
+    border-color: var(--cyan);
+    background: rgba(88, 166, 255, 0.06);
+  }
+  .kanban-quicklink .ql-label { font-size: 13px; font-weight: 600; }
+  .kanban-quicklink .ql-arrow { color: var(--cyan); font-size: 14px; }
+  .kanban-quicklink .ql-count {
+    font-size: 11px; color: var(--text2);
+    background: var(--bg); padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--line);
+  }
+
+  /* ---------- Command-center header (sticky) ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 16px; margin: 0 -16px 16px -16px;
+    background: rgba(22, 27, 34, 0.92);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar .brand { display: flex; flex-direction: column; line-height: 1.15; min-width: 220px; }
+  .topbar .brand .title { font-size: 16px; font-weight: 600; }
+  .topbar .brand .subtitle { font-size: 11px; color: var(--text3); }
+  .topbar .center {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1; justify-content: center;
+  }
+  .topbar .right { display: flex; gap: 8px; align-items: center; }
+  .topbar .pill {
+    font-size: 11px; padding: 4px 9px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--text2);
+    white-space: nowrap;
+  }
+  .topbar .pill.green  { color: var(--green); border-color: var(--green); }
+  .topbar .pill.amber  { color: var(--amber); border-color: var(--amber); }
+  .topbar .pill.red    { color: var(--red);   border-color: var(--red); }
+  .topbar .pill.cyan   { color: var(--cyan);  border-color: var(--cyan); }
+  .topbar .pill.gray   { color: var(--text3); }
+  .topbar button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-size: 12px; font-weight: 500;
+  }
+  .topbar button:hover { border-color: var(--cyan); color: var(--cyan); }
+  .topbar .last-refreshed {
+    font-size: 11px; color: var(--text3); margin-left: 4px;
+  }
+  @media (max-width: 800px) {
+    .topbar { flex-direction: column; align-items: flex-start; }
+    .topbar .center, .topbar .right { justify-content: flex-start; }
+  }
+
+  /* ---------- LAN warning ---------- */
+  .lan-warning {
+    background: rgba(255, 165, 0, 0.08);
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .lan-warning strong { color: var(--amber); }
+
+  /* ---------- Section / panel ---------- */
+  section {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  section > h2 {
+    font-size: 12px; font-weight: 600;
+    margin: 0; padding: 10px 14px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 8px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text2);
+  }
+  section > h2 .num { color: var(--text3); font-weight: 400; }
+  section > h2 .hint { color: var(--text3); font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: auto; font-size: 11px; }
+  section .body { padding: 14px; }
+
+  /* ---------- Summary cards (Overview) ---------- */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .summary-card {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .summary-label {
+    font-size: 0.85em;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .summary-value {
+    font-size: 2em;
+    font-weight: 600;
+    line-height: 1.1;
+    word-break: break-word;
+  }
+  .summary-value.green { color: var(--green); }
+  .summary-value.red   { color: var(--red); }
+  .summary-value.amber { color: var(--amber); }
+  .summary-value.blue  { color: var(--blue); }
+  .summary-value.gray  { color: var(--text3); }
+  .summary-value.yellow{ color: var(--yellow); }
+  .summary-reason {
+    font-size: 0.75em;
+    color: var(--text3);
+    margin-top: 6px;
+  }
+
+  /* ---------- MC-LIVE-DASHBOARD-1: live pulse + relative time ---------- */
+  .live-pulse {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.55em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--green);
+    vertical-align: middle;
+    padding: 2px 6px;
+    border: 1px solid var(--green);
+    border-radius: 999px;
+    background: rgba(0, 200, 100, 0.08);
+    animation: live-pulse-blink 1.6s ease-in-out infinite;
+  }
+  .live-pulse::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 0 rgba(0, 200, 100, 0.6);
+    animation: live-pulse-dot 1.6s ease-in-out infinite;
+  }
+  .last-check-rel {
+    margin-left: 6px;
+    font-size: 0.55em;
+    color: var(--text2);
+    text-transform: lowercase;
+    vertical-align: middle;
+  }
+  @keyframes live-pulse-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+  @keyframes live-pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 100, 0.6); }
+    50%      { box-shadow: 0 0 0 6px rgba(0, 200, 100, 0); }
+  }
+
+  /* ---------- Agent cards ---------- */
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .agent-card {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--text3);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .agent-card.active  { border-left-color: var(--green); }
+  .agent-card.idle    { border-left-color: var(--amber); }
+  .agent-card.blocked { border-left-color: var(--red); }
+  .agent-card.unknown { border-left-color: var(--text3); }
+  /* MC-AGENT-LOG-FIX-1: stale agent visual — no fresh log in 30+ min */
+  .agent-card.stale { border-left-color: var(--red); box-shadow: inset 0 0 0 1px rgba(220,80,80,0.25); }
+  .stuck-badge {
+    display: inline-block;
+    background: rgba(220,80,80,0.18);
+    color: var(--red);
+    font-size: 0.75em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    cursor: help;
+  }
+  .agent-log-file {
+    color: var(--text3);
+    font-size: 0.7em;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+  .agent-name {
+    font-size: 1.4em;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .agent-name .emoji { margin-right: 4px; }
+  .agent-role {
+    color: var(--text2);
+    font-size: 0.85em;
+    margin-bottom: 10px;
+  }
+  .agent-row { margin-top: 8px; font-size: 0.9em; }
+  .agent-row .lbl { color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 2px; }
+  .agent-blocker { color: var(--red); margin-top: 8px; font-size: 0.9em; }
+
+  /* ---------- Action Required panel ---------- */
+  .action-panel { margin-top: 8px; }
+  .action-row {
+    padding: 8px 12px;
+    border-left: 3px solid var(--text3);
+    margin-bottom: 4px;
+    background: var(--panel-2);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.95em;
+  }
+  .action-row.warn  { border-left-color: var(--yellow); }
+  .action-row.fail  { border-left-color: var(--red); }
+  .action-row.ok    { border-left-color: var(--green); }
+  .action-row .icon { margin-right: 8px; }
+
+  /* ---------- Warnings panel (Stage 17) ---------- */
+  .warnings-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--text3);
+    font-size: 0.95em;
+  }
+  .warnings-row.warn  { border-left-color: var(--yellow); }
+  .warnings-row.error { border-left-color: var(--red); }
+  .warnings-row.ok    { border-left-color: var(--green); }
+  .warnings-row .meta {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .warnings-row .meta .title-line {
+    font-weight: 600;
+    margin-bottom: 2px;
+    word-break: break-word;
+  }
+  .warnings-row .meta .sub-line {
+    color: var(--text3);
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+  .warnings-row .fix-btn {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    background: var(--bg1);
+    color: var(--text1);
+    border: 1px solid var(--yellow);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+  .warnings-row .fix-btn:hover {
+    background: var(--yellow);
+    color: var(--bg0);
+  }
+  .warnings-row .fix-btn.sent {
+    border-color: var(--green);
+    color: var(--green);
+    cursor: default;
+  }
+
+  /* ---------- Pending Orders panel (Stage 19) ---------- */
+  .orders-banner {
+    margin: 0 0 10px 0;
+    padding: 8px 12px;
+    border: 1px solid var(--yellow);
+    border-left: 3px solid var(--yellow);
+    border-radius: 4px;
+    background: rgba(255, 193, 7, 0.06);
+    color: var(--yellow);
+    font-size: 0.85em;
+    line-height: 1.4;
+  }
+  .order-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+    color: var(--text2, var(--text3));
+    background: var(--bg1, transparent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  .warnings-row .status-pill {
+    flex: 0 0 auto;
+    font-size: 0.75em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+  }
+  .warnings-row .status-pill.pending    { background: rgba(255,193,7,0.15);  color: var(--yellow); border: 1px solid var(--yellow); }
+  .warnings-row .status-pill.in_progress { background: rgba(0,150,255,0.15);  color: var(--blue);   border: 1px solid var(--blue);   }
+  .warnings-row .requested-by {
+    flex: 0 0 auto;
+    color: var(--text3);
+    font-size: 0.8em;
+    font-style: italic;
+  }
+
+  /* ---------- Badges (kept for tables) ---------- */
+  .muted { color: var(--text3); }
+  .badge {
+    display: inline-flex; align-items: center;
+    font-size: 12px;
+    padding: 2px 7px; border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .badge .muted { background: transparent; border: none; padding: 0; }
+  .badge .ts { color: var(--text3); margin-left: 6px; font-size: 11px; }
+  .badge.green  { color: var(--green); border-color: var(--green); }
+  .badge.amber  { color: var(--amber); border-color: var(--amber); }
+  .badge.red    { color: var(--red);   border-color: var(--red); }
+  .badge.cyan   { color: var(--cyan);  border-color: var(--cyan); }
+  .badge.gray   { color: var(--text3); }
+  .dash { color: var(--text3); cursor: help; border-bottom: 1px dotted var(--text3); }
+
+  /* ---------- Demo banner ---------- */
+  .demo-banner {
+    background: rgba(255, 165, 0, 0.1);
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-size: 12px;
+  }
+  .demo-banner code { color: var(--amber); background: transparent; }
+
+  /* ---------- Filter bar ---------- */
+  .filter-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; flex-wrap: wrap; }
+  .filter-bar .muted { color: var(--text3); font-size: 11px; }
+  .filter-btn {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--text2);
+    padding: 3px 9px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .filter-btn:hover { color: var(--text); border-color: var(--text3); }
+  .filter-btn.active { color: var(--cyan); border-color: var(--cyan); }
+
+  .ts-iso { color: var(--text3); font-size: 10px; margin-left: 4px; opacity: 0.7; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; word-break: break-word; }
+  th { color: var(--text2); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:last-child td { border-bottom: none; }
+  .empty {
+    color: var(--text3); font-style: italic; font-size: 12px;
+    padding: 8px 0;
+  }
+  .ts { color: var(--text3); font-size: 11px; }
+
+  /* Tasks table — pills no-wrap, others wrap */
+  #tasks table td .badge, #tasks table th .badge { white-space: nowrap; }
+  #tasks table th, #tasks table td { white-space: normal; }
+  #tasks table td.id, #tasks table th.id { white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
+  /* Empty-state card for tasks */
+  .empty-card {
+    background: var(--panel-2);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text2);
+  }
+  .empty-card .icon { font-size: 2em; display: block; margin-bottom: 6px; }
+  .empty-card .title { font-weight: 600; color: var(--text); font-size: 1.05em; }
+  .empty-card .sub { font-size: 0.9em; color: var(--text3); margin-top: 4px; }
+
+  /* Logs panel */
+  .recent-list { display: flex; flex-direction: column; gap: 4px; }
+  .recent-list .item {
+    display: grid;
+    grid-template-columns: 70px 56px 70px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 5px 8px;
+    border-radius: 4px;
+    background: var(--panel-2);
+    font-size: 12px;
+  }
+  .recent-list .item .ts { color: var(--text3); font-size: 11px; }
+  .recent-list .item .actor { color: var(--text2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  details.logs-details { margin-top: 12px; }
+  details.logs-details summary {
+    cursor: pointer; color: var(--text2); font-size: 12px;
+    padding: 6px 0; user-select: none;
+  }
+  details.logs-details summary:hover { color: var(--text); }
+  .health-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;
+  }
+  .health-cell .muted { font-size: 11px; margin-bottom: 4px; display: block; }
+  .health-cell .reason { font-size: 11px; color: var(--text3); margin-left: 6px; }
+
+  footer {
+    margin-top: 16px; padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    color: var(--text3); font-size: 11px;
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  footer code { color: var(--text2); }
+
+  @media (max-width: 600px) {
+    body { padding: 0 10px 16px 10px; }
+    .topbar { margin: 0 -10px 12px -10px; padding: 10px 12px; }
+    table { font-size: 11px; }
+    th, td { padding: 5px 4px; }
+    #agents .agent-name { font-size: 1.2em; }
+    .recent-list .item { grid-template-columns: 60px 1fr; }
+    .recent-list .item .actor, .recent-list .item .level { display: none; }
+  }
+
+  /* MC-KANBAN-MOVE-1: Kanban CSS moved to /kanban (kanban.html) */
+
+  /* ---------- Badges (kept for tables) ---------- */
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-header">⚡ NofiTech</div>
+  <nav>
+    <a href="/" class="nav-tab active">⚡ Main</a>
+    <a href="/kanban" class="nav-tab">🗂 Kanban</a>
+    <a href="/memory-graph" class="nav-tab">🧠 Memory Graph</a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-clock" id="sidebar-clock" title="Live Dubai time (UTC+4) — source of truth for all task timestamps">
+      <div class="clock-time" id="clock-time">--:--:--</div>
+      <div class="clock-date" id="clock-date">— —</div>
+      <div class="clock-tz">Dubai · UTC+4</div>
+    </div>
+    v1.17.0+memory<br>
+    <button class="token-btn" id="token-btn" style="margin-top:6px;width:100%;font-size:11px;padding:4px;background:transparent;color:var(--text2);border:1px solid var(--line);border-radius:3px;cursor:pointer;" title="Set MC_ADMIN_TOKEN (required for write actions)">🔑 Token</button>
+  </div>
+</aside>
+<main class="main-content">
+
+<!-- ========== Command-center header ========== -->
+<header class="topbar" role="banner">
+  <div class="brand">
+    <span class="title">🛡️ NofiTech Mission Control</span>
+    <span class="subtitle" id="version-pill">v— · live</span>
+  </div>
+  <div class="center">
+    <span class="pill" id="health-pill" title="System health">health: …</span>
+    <span class="pill" id="project-pill"  title="Current project">project: …</span>
+    <span class="pill" id="verified-pill" title="Last Argus verification">verified: …</span>
+  </div>
+  <div class="right">
+    <span class="pill cyan" id="mode-pill" title="Data mode">LAN · Real Data Only</span>
+    <span class="pill gray tech-detail" id="lan-pill" title="LAN IP">LAN: …</span>
+    <button id="btn-refresh" onclick="loadAll()">↻ REFRESH</button>
+    <button id="btn-detail" onclick="toggleDetail()" title="Toggle technical detail">Detailed</button>
+  </div>
+</header>
+
+<div class="topbar-meta" style="display:flex;justify-content:space-between;align-items:center;margin:-8px 0 12px 0;padding:0 4px">
+  <span class="last-refreshed" id="last-refreshed">Last refreshed: never · auto-refresh: 5s</span>
+  <span class="last-refreshed" id="version-subtitle" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">v—</span>
+</div>
+
+<div class="lan-warning" id="lan-warning">⚠ <strong>Local/LAN use only.</strong> This dashboard has no authentication in v1. Do not expose to the public internet. Intended for trusted networks (home/lab).</div>
+
+<!-- ========== 1. Overview ========== -->
+<section>
+  <h2><span class="num">1.</span> Overview <span class="hint" id="overview-hint">6 metrics</span></h2>
+  <div class="body"><div id="overview" class="summary-grid"></div></div>
+</section>
+
+<!-- ========== 2. Agents ========== -->
+<section>
+  <h2><span class="num">2.</span> Agents <span class="hint">3 cards</span></h2>
+  <div class="body"><div id="agents" class="agent-grid"></div></div>
+</section>
+
+<!-- ========== 2b. Action Required (NEW) ========== -->
+<section>
+  <h2><span class="num">3.</span> Action Required <span class="hint" id="action-hint">scanning…</span></h2>
+  <div class="body"><div id="action" class="action-panel"></div></div>
+</section>
+
+<!-- ========== 3. Tasks ========== -->
+<section>
+  <h2><span class="num">4.</span> Tasks <span class="hint" id="tasks-hint">real only</span></h2>
+  <div class="body"><div id="tasks"></div></div>
+</section>
+
+<!-- ========== 4. Projects ========== -->
+<section>
+  <h2><span class="num">5.</span> Projects <span class="hint" id="projects-hint">…</span></h2>
+  <div class="body"><div id="projects"></div></div>
+</section>
+
+<!-- ========== 5. Provider / Model (REMOVED at Stage 17) ========== -->
+<!-- Panel removed per NOFI directive. The /api/data/provider endpoint is
+     still served (some hidden API consumer may rely on it), but the panel
+     itself is no longer rendered. No panel render call in loadAll(). -->
+
+<!-- ========== 6. Logs / Health ========== -->
+<section>
+  <h2><span class="num">6.</span> Logs / Health <span class="hint" id="logs-hint">…</span></h2>
+  <div class="body"><div id="logs"></div></div>
+</section>
+
+<!-- ========== 6b. Warnings (NEW at Stage 17) ========== -->
+<section>
+  <h2><span class="num">7.</span> Warnings <span class="hint" id="warnings-hint">…</span></h2>
+  <div class="body"><div id="warnings" class="action-panel"></div></div>
+</section>
+
+<!-- ========== 8. Pending Orders (NEW at Stage 19) ========== -->
+<section>
+  <h2><span class="num">8.</span> Pending Orders <span class="hint" id="orders-hint">…</span></h2>
+  <div class="body">
+    <div id="orders-banner" class="orders-banner">
+      ⚠ Orders require chat confirmation: "Thor, do it" or
+      "Thor, execute pending order [id]". Buttons do NOT auto-execute.
+    </div>
+    <div id="orders" class="action-panel"></div>
+  </div>
+</section>
+
+<!-- ========== 9. GitHub Connection (NEW at Stage 20) ========== -->
+<section>
+  <h2><span class="num">9.</span> GitHub Connection <span class="hint" id="github-hint">live</span></h2>
+  <div class="body">
+    <div id="github" class="summary-grid"></div>
+  </div>
+</section>
+
+<!-- Section 10 (Kanban) moved to /kanban page — see kanban.html (MC-KANBAN-MOVE-1, 2026-06-16) -->
+<div class="kanban-quicklink-card" style="background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:18px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <div>
+    <div style="font-weight:600;color:var(--text);margin-bottom:4px">🗂 Kanban Board</div>
+    <div style="color:var(--text2);font-size:13px">Multi-agent task board now lives on its own page.</div>
+  </div>
+  <a href="/kanban" class="nav-tab" style="background:var(--panel);border:1px solid var(--line);padding:8px 14px;border-radius:6px;text-decoration:none;color:var(--text)">🗂 Open Kanban Board →</a>
+</div>
+
+<footer>
+  <span id="foot-version">v— · live</span>
+  <span id="foot-lan">LAN: detecting…</span>
+  <span id="foot-uptime">up —</span>
+  <span id="foot-key">API key: not loaded</span>
+  <span class="spacer" style="flex:1"></span>
+  <span>local only · manual refresh · 3 agents</span>
+</footer>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const dashOr = (v, reason) => v === null || v === undefined || v === "" ? `<span class="muted" title="${esc(reason || 'no source')}">—</span>` : esc(v);
+const badge = (label, cls) => `<span class="badge ${cls || 'gray'}">${esc(label)}</span>`;
+
+// MC-MEMORY-GRAPH-3A (2026-06-17): LAN writes (e.g. POST /api/data/order) need
+// MC_ADMIN_TOKEN. The browser can't read the server env, so the user pastes the
+// token here and we persist it in localStorage. All write fetches go through
+// authFetch() which auto-includes X-MC-Admin-Token. On 401/403 it offers a
+// re-paste prompt. This matches the kanban/memory-graph pages.
+const MC_TOKEN_KEY = "mc_admin_token";
+function getStoredToken() {
+  try { return localStorage.getItem(MC_TOKEN_KEY) || ""; } catch (e) { return ""; }
+}
+function setStoredToken(v) {
+  try { if (v) localStorage.setItem(MC_TOKEN_KEY, v); else localStorage.removeItem(MC_TOKEN_KEY); } catch (e) {}
+}
+function promptForToken() {
+  const cur = getStoredToken();
+  const v = prompt("Paste MC_ADMIN_TOKEN (the value from start-mc.sh):", cur || "");
+  if (v === null) return;
+  setStoredToken(v.trim());
+  if (v.trim()) alert("Token saved. Write actions will now include X-MC-Admin-Token.");
+  else alert("Token cleared. Write actions will fail until you set one.");
+}
+async function authFetch(url, opts) {
+  opts = opts || {};
+  opts.cache = "no-store";
+  opts.headers = Object.assign({}, opts.headers || {});
+  opts.headers["Content-Type"] = opts.headers["Content-Type"] || "application/json";
+  const t = getStoredToken();
+  if (t) opts.headers["X-MC-Admin-Token"] = t;
+  const r = await fetch(url, opts);
+  if (r.status === 401 || r.status === 403) {
+    if (t) { if (confirm(`Server rejected the stored token (HTTP ${r.status}). Re-paste?`)) promptForToken(); }
+    else { promptForToken(); }
+  }
+  return r;
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`HTTP ${r.status} on ${url}`);
+  return await r.json();
+}
+
+// --- Stage 12: task filter state — Real only is the default ---
+let _tasksFilter = 'real';
+let _tasksCounts = { all: 0, demo: 0, real: 0 };
+async function setTasksFilter(f) {
+  if (!['all','demo','real'].includes(f)) f = 'real';
+  _tasksFilter = f;
+  let url;
+  if (f === 'real') url = '/api/data/tasks';
+  else if (f === 'all') url = '/api/data/tasks?include=demo';
+  else url = '/api/data/tasks?include=demo&filter=demo';
+  try {
+    const d = await fetchJSON(url);
+    renderTasks(d);
+  } catch (e) {
+    renderTasks({ tasks: [], reason: 'fetch failed: ' + e.message });
+  }
+}
+async function refreshTasksCounts() {
+  try {
+    const [a, dm, rl] = await Promise.all([
+      fetchJSON('/api/data/tasks?include=demo'),
+      fetchJSON('/api/data/tasks?include=demo&filter=demo'),
+      fetchJSON('/api/data/tasks'),
+    ]);
+    _tasksCounts = { all: a.count || 0, demo: dm.count || 0, real: rl.count || 0 };
+  } catch (e) {
+    _tasksCounts = { all: 0, demo: 0, real: 0 };
+  }
+  const setLabel = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  setLabel('tasks-filter-real', `Real only (${_tasksCounts.real})`);
+  setLabel('tasks-filter-all',  `All (${_tasksCounts.all})`);
+  setLabel('tasks-filter-demo', `Demo only (${_tasksCounts.demo})`);
+}
+
+// --- Detail toggle (Feature #7) ---
+function toggleDetail() {
+  document.body.classList.toggle('detailed');
+  const btn = document.getElementById('btn-detail');
+  if (btn) btn.textContent = document.body.classList.contains('detailed') ? 'Compact' : 'Detailed';
+}
+
+// ============================================================
+// 1. Overview — 6 visual cards in a responsive grid
+// ============================================================
+function renderOverview(d) {
+  // Hermes / System
+  const hv = d.hermes_status?.value;
+  const hermesColor = hv === "ok" ? "green" : hv === "unknown" ? "amber" : (hv ? "red" : "gray");
+  // Active tasks
+  const at = d.active_tasks?.value;
+  const atColor = (at > 0) ? "blue" : "gray";
+  // Failed tasks
+  const ft = d.failed_tasks?.value;
+  const ftColor = (ft > 0) ? "red" : "gray";
+  // Warnings
+  const w = d.warnings?.value;
+  const wColor = (w > 0) ? "yellow" : "gray";
+  // Current project
+  const pv = d.current_project?.value;
+  // Last check + polled_at_iso — MC-LIVE-DASHBOARD-1: now reflects actual
+  // poll time, not memory-log entries. Rendered as "live" pulse + relative
+  // time.
+  const lc = d.last_check;
+  const polledAt = d.polled_at_iso || lc?.value;
+  const isLive = !!polledAt;
+  const livePulse = `<span class="live-pulse" title="Live: polled ${esc(polledAt || '')}">● live</span>`;
+
+  const card = (label, valueHtml, valueClass, reason) => `
+    <div class="summary-card">
+      <div class="summary-label">${esc(label)}</div>
+      <div class="summary-value ${valueClass}">${valueHtml}</div>
+      ${reason ? `<div class="summary-reason">${esc(reason)}</div>` : ''}
+    </div>`;
+
+  // Last-check value: live pulse + relative time from polled_at_iso.
+  // Falls back to lc.value/rel for any old payload that lacks polled_at_iso.
+  const lastCheckHtml = isLive
+    ? `${livePulse} <span class="last-check-rel" title="${esc(polledAt)}">${esc(relTime(polledAt))}</span>`
+    : `<span class="muted" title="${esc(lc?.reason || 'no source')}">—</span>`;
+
+  const html = [
+    card("Hermes / System",
+         hv ? esc(hv) : `<span class="muted" title="${esc(d.hermes_status?.reason || 'no source')}">—</span>`,
+         hermesColor,
+         (!hv && d.hermes_status?.reason) ? d.hermes_status.reason : null),
+
+    card("Active tasks",
+         (at === null || at === undefined)
+           ? `<span class="muted" title="${esc(d.active_tasks?.reason || 'no source')}">—</span>`
+           : esc(String(at)),
+         atColor,
+         (at === null || at === undefined) ? d.active_tasks?.reason : null),
+
+    card("Failed tasks",
+         (ft === null || ft === undefined)
+           ? `<span class="muted" title="${esc(d.failed_tasks?.reason || 'no source')}">—</span>`
+           : esc(String(ft)),
+         ftColor,
+         (ft === null || ft === undefined) ? d.failed_tasks?.reason : null),
+
+    card("Warnings",
+         (w === null || w === undefined)
+           ? `<span class="muted" title="${esc(d.warnings?.reason || 'no source')}">—</span>`
+           : esc(String(w)),
+         wColor,
+         d.warnings?.breakdown
+           ? `blocked: ${d.warnings.breakdown.blocked_tasks}, log warns: ${d.warnings.breakdown.log_warns}`
+           : (d.warnings?.reason || null)),
+
+    card("Current project",
+         pv ? esc(pv) : `<span class="muted" title="${esc(d.current_project?.reason || 'no source')}">—</span>`,
+         pv ? "blue" : "gray",
+         (!pv && d.current_project?.reason) ? d.current_project.reason : null),
+
+    card("Last check",
+         lastCheckHtml,
+         "gray",
+         polledAt ? `polled ${esc(polledAt)}` : null),
+  ].join("");
+
+  $("#overview").innerHTML = html;
+}
+
+// ============================================================
+// 2. Agents — 3 cards in a grid
+// ============================================================
+function renderAgents(d) {
+  if (!d.agents || !d.agents.length) { $("#agents").innerHTML = `<div class="empty">no agents</div>`; return; }
+  const statusClass = (s) => s === "active" ? "active" : s === "idle" ? "idle" : s === "blocked" ? "blocked" : "unknown";
+  const pillClass   = (s) => s === "active" ? "green"  : s === "idle" ? "amber" : s === "blocked" ? "red" : "gray";
+
+  const cards = d.agents.map(a => {
+    const cls = statusClass(a.status);
+    const pill = pillClass(a.status);
+
+    // current assignment
+    let caHtml;
+    if (a.current_assignment && String(a.current_assignment).trim()) {
+      caHtml = esc(a.current_assignment);
+    } else {
+      caHtml = `<span class="dash" title="${esc((a.reasons || []).join("; ") || "no current assignment")}">Idle</span>`;
+    }
+
+    // last activity — show "Xm ago" with the log filename underneath,
+    // and a ⚠ stuck badge if the agent is stale (no fresh log in 30+ min
+    // while claiming to be spawning/in_progress).
+    let laHtml;
+    const stale = a.stale === true;
+    const staleTip = stale
+      ? "No fresh log in 30+ min — agent may be stuck"
+      : (a.mtime_age_seconds != null ? `Last log: ${esc(a.last_log || "(none)")}` : "no log yet");
+    if (a.last_activity_iso) {
+      const badge = stale ? ` <span class="stuck-badge" title="${staleTip}">⚠ stuck</span>` : "";
+      const logFile = a.last_log
+        ? `<div class="agent-log-file" title="${esc(a.last_log)}">📄 ${esc(a.last_log.split("/").pop())}</div>`
+        : "";
+      laHtml = `<span title="${esc(a.last_activity_iso)}">${esc(relTime(a.last_activity_iso))}</span>${badge}${logFile}`;
+    } else if (a.last_activity) {
+      laHtml = `<span>${esc(a.last_activity)}</span>`;
+    } else {
+      laHtml = `<span class="dash" title="${esc((a.reasons || []).join("; ") || "no activity yet")}">—</span>`;
+    }
+
+    // blocker
+    const blHtml = a.blocker
+      ? `<div class="agent-blocker">⚠ ${esc(a.blocker)}</div>`
+      : '';
+
+    return `
+      <div class="agent-card ${cls}${stale ? ' stale' : ''}">
+        <div class="agent-name"><span class="emoji">${esc(a.emoji || "•")}</span>${esc(a.name)}${a.status === "in_progress" ? ' <span class="live-pulse" title="active right now (heartbeat fresh or running task)">live</span>' : ''}</div>
+        <div class="agent-role">${esc(a.role)} · ${badge(a.status || "—", pill)}</div>
+        <div class="agent-row">
+          <span class="lbl">Current assignment</span>
+          ${caHtml}
+        </div>
+        <div class="agent-row">
+          <span class="lbl">Last activity</span>
+          ${laHtml}
+        </div>
+        ${blHtml}
+      </div>`;
+  }).join("");
+
+  $("#agents").innerHTML = cards;
+}
+
+// ============================================================
+// 2b. Action Required — derived from existing data
+// ============================================================
+function renderActionRequired(overview, tasks, provider, logs, projects) {
+  const issues = [];   // {level: 'warn'|'fail', icon, text}
+  const notices = [];  // informational only
+
+  // 1. Provider proxy not connected
+  if (provider?.providers && Array.isArray(provider.providers)) {
+    for (const p of provider.providers) {
+      const cs = (p.connection_status || "").toLowerCase();
+      if (cs.includes("not connected") || cs.includes("down") || cs.includes("unreachable")) {
+        issues.push({ level: "warn", icon: "🔌",
+          text: `Provider proxy not connected: <strong>${esc(p.provider || p.slot || "unknown")}</strong> — ${esc(p.connection_detail || cs)}` });
+      }
+      // 2. Provider key missing
+      if (p.key_configured === false || cs.includes("not configured") || (p.connection_detail || "").toLowerCase().includes("no key")) {
+        const slot = p.slot || "?";
+        if (slot === "paid") {
+          issues.push({ level: "fail", icon: "🔑",
+            text: `Provider key missing: <strong>${esc(p.provider || "paid")}</strong> — .env not configured or key absent` });
+        } else {
+          notices.push({ level: "warn", icon: "🔑",
+            text: `Provider config incomplete: <strong>${esc(p.provider || p.slot || "unknown")}</strong> — ${esc(p.connection_detail || cs)}` });
+        }
+      }
+    }
+  }
+
+  // 3. No real tasks yet
+  const realCount = tasks?.count ?? (tasks?.tasks ? tasks.tasks.length : 0);
+  const includeDemo = tasks?.include_demo === true;
+  if (realCount === 0 && !includeDemo) {
+    issues.push({ level: "warn", icon: "📭",
+      text: "No real tasks yet — pipeline idle. Create a task file under <code>01_projects/&lt;project&gt;/tasks/</code> to populate." });
+  }
+
+  // 4. App health degraded
+  if (logs?.app_health && logs.app_health !== "ok") {
+    issues.push({ level: logs.app_health === "down" ? "fail" : "warn", icon: "🩺",
+      text: `App health <strong>${esc(logs.app_health)}</strong>${logs.app_health_reason ? " — " + esc(logs.app_health_reason) : ""}` });
+  }
+
+  // 5. Stale project status (> 7 days)
+  if (projects?.projects && Array.isArray(projects.projects)) {
+    const now = Date.now();
+    for (const p of projects.projects) {
+      if (!p.updated) continue;
+      const t = new Date(p.updated).getTime();
+      if (isNaN(t)) continue;
+      const days = (now - t) / 86400000;
+      if (days > 7) {
+        issues.push({ level: "warn", icon: "⏳",
+          text: `Stale project status: <strong>${esc(p.name || "?")}</strong> last updated ${Math.floor(days)}d ago` });
+      }
+    }
+  }
+
+  // Render
+  const hint = document.getElementById('action-hint');
+  let rows = "";
+  if (issues.length === 0) {
+    rows = `<div class="action-row ok"><span class="icon">✓</span> No action required — all systems nominal.</div>`;
+    if (hint) hint.textContent = "all clear";
+  } else {
+    rows = issues.map(i =>
+      `<div class="action-row ${i.level}"><span class="icon">${i.icon}</span> ${i.text}</div>`
+    ).join("");
+    const fails = issues.filter(i => i.level === "fail").length;
+    const warns = issues.filter(i => i.level === "warn").length;
+    if (hint) hint.textContent = `${issues.length} item(s) — ${fails} fail, ${warns} warn`;
+  }
+
+  $("#action").innerHTML = rows;
+}
+
+// ============================================================
+// 3. Tasks — table or empty-state card
+// ============================================================
+function renderTasks(d) {
+  const filterBar = `<div class="filter-bar">
+    <span class="muted">View:</span>
+    <button id="tasks-filter-real" class="filter-btn ${_tasksFilter==='real'?'active':''}" onclick="setTasksFilter('real')">Real only (…)</button>
+    <button id="tasks-filter-all"  class="filter-btn ${_tasksFilter==='all'?'active':''}"  onclick="setTasksFilter('all')">All (…)</button>
+    <button id="tasks-filter-demo" class="filter-btn ${_tasksFilter==='demo'?'active':''}" onclick="setTasksFilter('demo')">Demo only (…)</button>
+    <span class="muted" style="margin-left:8px">${esc(d.include_demo ? "showing all (demo included)" : "real only — demo hidden")}</span>
+  </div>`;
+
+  if (!d.tasks || !d.tasks.length) {
+    // Empty state — if real-only (default) and no reason, show the friendly card
+    const isEmpty = !d.reason || d.reason === null;
+    if (isEmpty && _tasksFilter === 'real' && !d.include_demo) {
+      $("#tasks").innerHTML = filterBar + `
+        <div class="empty-card">
+          <span class="icon">📭</span>
+          <div class="title">No real tasks yet.</div>
+          <div class="sub">When NOFI gives Thor a task, it will appear here automatically.</div>
+        </div>`;
+      const h = document.getElementById('tasks-hint');
+      if (h) h.textContent = "0 real";
+      return;
+    }
+    const emptyText = d.reason || (_tasksFilter === 'demo' ? "No demo tasks." : "No tasks match this filter.");
+    $("#tasks").innerHTML = filterBar + `<div class="empty">${esc(emptyText)}</div>`;
+    const h = document.getElementById('tasks-hint');
+    if (h) h.textContent = `0 ${_tasksFilter}`;
+    return;
+  }
+
+  const rows = d.tasks.map(t => {
+    const stCls = t.status === "done" ? "green" : t.status === "failed" || t.status === "blocked" ? "red" : t.status === "in-progress" ? "amber" : "gray";
+    const prCls = t.priority === "P0" ? "red" : t.priority === "P1" ? "amber" : "gray";
+    const blockedHtml = (t.status === "blocked" && t.blockers)
+      ? `<span class="dash" title="${esc(t.blockers)}">${esc(t.blockers.length > 40 ? t.blockers.slice(0, 40) + "…" : t.blockers)}</span>`
+      : (t.status === "blocked" ? `<span class="dash" title="no blocker reason given">—</span>` : `<span class="muted">—</span>`);
+    return `<tr>
+      <td class="id">${esc(t.id)}</td>
+      <td>${esc(t.title)}</td>
+      <td>${esc(t.agent || t.assigned_to || "—")}</td>
+      <td>${badge(t.status, stCls)}</td>
+      <td>${badge(t.priority, prCls)}</td>
+      <td>${blockedHtml}</td>
+      <td><span class="ts">${esc(t.updated || t.updated_at || "—")}</span></td>
+      <td><span class="ts">${esc(t.evidence || "none")}</span></td>
+    </tr>`;
+  }).join("");
+
+  const demoCount = (d.tasks || []).filter(t => t.data_source === "local-demo").length;
+  const demoBanner = demoCount > 0
+    ? `<div class="demo-banner">⚠ ${demoCount} task(s) shown are <strong>local/demo</strong> data — see frontmatter <code>data_source: local-demo</code>. Replace with real task files when the agent system produces them.</div>`
+    : "";
+
+  $("#tasks").innerHTML = filterBar + demoBanner + `<table>
+    <thead><tr><th class="id">ID</th><th>Title</th><th>Agent</th><th>Status</th><th>Priority</th><th>Blocked reason</th><th>Updated</th><th>Evidence</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+
+  const h = document.getElementById('tasks-hint');
+  if (h) h.textContent = `${d.tasks.length} ${_tasksFilter}${demoCount > 0 ? ` (${demoCount} demo)` : ''}`;
+}
+
+// ============================================================
+// 4. Projects
+// ============================================================
+function renderProjects(d) {
+  if (!d.projects || !d.projects.length) {
+    $("#projects").innerHTML = `<div class="empty">No active project found.</div>`;
+    const h = document.getElementById('projects-hint');
+    if (h) h.textContent = "0 projects";
+    return;
+  }
+  const demoCount = (d.projects || []).filter(p => p.data_source === "local-demo").length;
+  const demoBanner = demoCount > 0
+    ? `<div class="demo-banner">⚠ ${demoCount} project(s) shown are <strong>local/demo</strong> data — see frontmatter <code>data_source: local-demo</code>. Replace with real status.md when the project system produces them.</div>`
+    : "";
+  const rows = d.projects.map(p => {
+    const phaseCls = (p.phase === "ship" || p.phase === "live") ? "green" : p.phase === "verify" ? "cyan" : p.phase === "build" ? "amber" : p.phase === "killed" ? "red" : "gray";
+    const statusCls = p.status === "active" ? "green" : p.status === "paused" ? "amber" : p.status === "killed" ? "red" : "gray";
+    const blockerHtml = p.blocker
+      ? `<span class="dash" title="${esc(p.blocker)}">${esc(p.blocker.length > 40 ? p.blocker.slice(0, 40) + "…" : p.blocker)}</span>`
+      : `<span class="muted">—</span>`;
+    return `<tr>
+      <td><strong>${esc(p.name)}</strong></td>
+      <td>${badge(p.status, statusCls)}</td>
+      <td>${badge(p.phase, phaseCls)}</td>
+      <td>${esc(p.progress_pct)}</td>
+      <td>${esc(p.next_action)}</td>
+      <td>${blockerHtml}</td>
+      <td>${p.approval_needed ? badge("YES", "red") : badge("no", "gray")}</td>
+    </tr>`;
+  }).join("");
+  $("#projects").innerHTML = demoBanner + `<table>
+    <thead><tr><th>Project</th><th>Status</th><th>Phase</th><th>Progress</th><th>Next action</th><th>Blocker</th><th>Approval</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  const h = document.getElementById('projects-hint');
+  if (h) h.textContent = `${d.projects.length} project(s)`;
+}
+
+// ============================================================
+// 5. Provider (REMOVED at Stage 17) — panel gone; endpoint still served
+// ============================================================
+// The dashboard no longer has a Provider/Model render function — the
+// panel was retired at Stage 17. data_provider() in serve.py is still
+// called by /api/data/provider for any hidden API consumer.
+
+// ============================================================
+// 6. Logs / Health — recent activity + details block
+// ============================================================
+function renderLogs(d) {
+  const appCls = d.app_health === "ok" ? "green" : d.app_health === "degraded" ? "amber" : "gray";
+  const apiCls = d.api_health === "ok" ? "green" : d.api_health === "degraded" ? "amber" : "gray";
+  const env = d.env || {};
+  const envKeys = Object.keys(env).filter(k => k !== "__env_file_present__");
+  const envHtml = envKeys.length === 0
+    ? `<span class="muted">no env vars tracked</span>`
+    : envKeys.map(k => {
+        const status = env[k];
+        const cls = status === "configured" ? "green" : status === "missing" ? "red" : "amber";
+        return `<div style="display:flex;gap:8px;align-items:center;margin:3px 0">
+          <span class="ts" style="min-width:240px">${esc(k)}</span>
+          ${badge(status, cls)}
+        </div>`;
+      }).join("");
+
+  const summary = `
+    <div class="health-grid">
+      <div class="health-cell">
+        <span class="muted">App health</span>
+        ${badge(d.app_health || "unknown", appCls)}${d.app_health_reason ? `<span class="reason">${esc(d.app_health_reason)}</span>` : ""}
+      </div>
+      <div class="health-cell">
+        <span class="muted">API health</span>
+        ${badge(d.api_health || "unknown", apiCls)}${d.api_health_reason ? `<span class="reason">${esc(d.api_health_reason)}</span>` : ""}
+      </div>
+      <div class="health-cell">
+        <span class="muted">Errors</span>
+        ${badge(String(d.errors || 0), d.errors > 0 ? "red" : "gray")}
+      </div>
+      <div class="health-cell">
+        <span class="muted">Warnings</span>
+        ${badge(String(d.warnings || 0), d.warnings > 0 ? "amber" : "gray")}
+      </div>
+      <div class="health-cell" style="grid-column:1 / -1">
+        <span class="muted">Last verification (Argus)</span>
+        ${d.last_verification
+          ? `<span class="ts">${esc(d.last_verification_rel)}</span> <span class="ts-iso">${esc(d.last_verification)}</span><br><span class="muted" style="font-size:10px">${esc(d.last_verification_source || "")}</span>`
+          : `<span class="dash" title="no Argus verification log found">—</span>`}
+      </div>
+      <div class="health-cell" style="grid-column:1 / -1">
+        <span class="muted">Environment</span>
+        ${envHtml}
+        ${env.__env_file_present__ === false
+          ? `<div class="muted" style="font-size:10px;margin-top:4px">.env file not present at .config/nofitech/.env</div>`
+          : ""}
+      </div>
+    </div>
+  `;
+
+  // Recent activity (top 5)
+  const events = d.events || [];
+  const recent = events.slice(0, 5);
+  let recentHtml = '';
+  if (recent.length === 0) {
+    const noEvents = (d.count === 0 && d.errors === 0 && d.warnings === 0);
+    const emptyText = noEvents ? "No logs available." : (d.reason || "No logs available.");
+    recentHtml = `<div class="empty">${esc(emptyText)}</div>`;
+  } else {
+    const items = recent.map(e => {
+      const cls = e.level === "error" ? "red" : e.level === "warn" ? "amber" : "gray";
+      const title = e.title || e.event_type || "—";
+      return `<div class="item">
+        <span class="ts">${esc(e.rel || "—")}</span>
+        <span>${badge(e.level || "info", cls)}</span>
+        <span class="actor">${esc(e.officer || "—")}</span>
+        <span>${esc(title)}</span>
+      </div>`;
+    }).join("");
+    recentHtml = `<div class="recent-list">${items}</div>`;
+  }
+
+  // Full events (collapsible) — shows source paths
+  let detailsHtml = '';
+  if (events.length > 0) {
+    const fullRows = events.map(e => {
+      const cls = e.level === "error" ? "red" : e.level === "warn" ? "amber" : "gray";
+      return `<tr>
+        <td><span class="ts">${esc(e.rel || "—")}</span> <span class="ts-iso">${esc(e.ts || "")}</span></td>
+        <td>${badge(e.level, cls)}</td>
+        <td>${esc(e.officer || "—")}</td>
+        <td>${esc(e.title || e.event_type || "—")}</td>
+        <td><span class="ts">${esc(e.source || "—")}</span></td>
+      </tr>`;
+    }).join("");
+    detailsHtml = `
+      <details class="logs-details">
+        <summary>Show full log details (${events.length} event${events.length === 1 ? '' : 's'})</summary>
+        <table>
+          <thead><tr><th>When</th><th>Level</th><th>Officer</th><th>Title</th><th>Source</th></tr></thead>
+          <tbody>${fullRows}</tbody>
+        </table>
+      </details>`;
+  }
+
+  $("#logs").innerHTML = summary + recentHtml + detailsHtml;
+
+  const h = document.getElementById('logs-hint');
+  // Stage 18: read the warnings/errors counts from the unbounded lists
+  // (single source of truth), not from the events array which is capped.
+  const wl = Array.isArray(d.warnings_list) ? d.warnings_list.length : 0;
+  const el = Array.isArray(d.errors_list)   ? d.errors_list.length   : 0;
+  if (h) h.textContent = `${d.count || events.length} event(s), ${el} err, ${wl} warn`;
+}
+
+// ============================================================
+// 6b. Warnings — read from logs.warnings_list + logs.errors_list
+//     (unbounded, all warn/error entries) + overview.warnings.breakdown.
+//     Per-row "Send fix order to Thor" button POSTs /api/data/order
+//     with a small JSON body; server appends a system_event to events.jsonl.
+//     Stage 18: single source of truth. The count summary, the rows, and
+//     the empty state all read from the same server-side lists.
+// ============================================================
+function renderWarnings(logs, overview) {
+  const hint = document.getElementById('warnings-hint');
+  // Stage 18: pull the unbounded lists directly. These are the single
+  // source of truth for the warnings count and the warnings panel.
+  const warns = (logs && Array.isArray(logs.warnings_list)) ? logs.warnings_list : [];
+  const errs  = (logs && Array.isArray(logs.errors_list))   ? logs.errors_list   : [];
+  // For backwards-compat / safety: also fold in any warn/error entries
+  // that happen to be in the events array (shouldn't happen post-Stage 18,
+  // but keeps the panel robust if events capping ever changes).
+  const ev = (logs && Array.isArray(logs.events)) ? logs.events : [];
+  const evWarnsErrs = ev.filter(e => e.level === "warn" || e.level === "error");
+  const seenSrcTs = new Set(warns.concat(errs).map(e => (e.source||"") + "::" + (e.ts||"")));
+  const extras = evWarnsErrs.filter(e => !seenSrcTs.has((e.source||"") + "::" + (e.ts||"")));
+
+  const breakdown = (overview && overview.warnings && overview.warnings.breakdown) || {};
+  const blockedTasks = breakdown.blocked_tasks || 0;
+  const logWarns = breakdown.log_warns || 0;
+  const logErrs  = breakdown.log_errors || 0;
+
+  const totalWarns = warns.length + extras.filter(e => e.level === "warn").length;
+  const totalErrs  = errs.length  + extras.filter(e => e.level === "error").length;
+
+  if (totalWarns === 0 && totalErrs === 0 && blockedTasks === 0) {
+    $("#warnings").innerHTML =
+      `<div class="action-row ok"><span class="icon">✓</span> No active warnings — all systems nominal.</div>`;
+    if (hint) hint.textContent = `0 warn · 0 err · 0 task`;
+    return;
+  }
+
+  // Build rows. Each row gets a stable DOM id so the click handler can
+  // read back the warning's text/id from data-* attributes.
+  const rows = [];
+  for (const w of warns) {
+    const title = w.title || w.message || "—";
+    rows.push(_warningsRow("warn", w, title));
+  }
+  for (const e of errs) {
+    const title = e.title || e.message || "—";
+    rows.push(_warningsRow("error", e, title));
+  }
+  for (const ex of extras) {
+    const title = ex.title || ex.message || "—";
+    rows.push(_warningsRow(ex.level, ex, title));
+  }
+
+  // If overview reports blocked tasks but no log warnings surfaced, add a
+  // synthetic row that lets NOFI trigger the same fix-order flow.
+  if (rows.length === 0 && blockedTasks > 0) {
+    const wid = "blocked::" + (overview && overview.last_check && overview.last_check.value || "now");
+    const titleText = `${blockedTasks} task(s) blocked — see Tasks panel`;
+    const ts = (overview && overview.last_check && overview.last_check.value) || "";
+    rows.push(
+      `<div class="warnings-row warn" data-warning-id="${esc(wid)}" data-warning-text="${esc(titleText)}" data-warning-source="00_company_os/data_overview" data-warning-ts="${esc(ts)}" data-warning-level="warn">
+        <span class="meta">
+          <div class="title-line">${badge("warn", "amber")} ${esc(titleText)}</div>
+          <div class="sub-line">${esc(ts ? relTime(ts) : "—")} · <span class="ts">00_company_os/data_overview</span></div>
+        </span>
+        <button class="fix-btn" onclick="sendFixOrder(this)">Send fix order to Thor</button>
+      </div>`
+    );
+  }
+
+  $("#warnings").innerHTML = rows.join("");
+  if (hint) hint.textContent = `${totalWarns} warn · ${totalErrs} err · ${blockedTasks} task`;
+}
+
+// Stage 18: shared row-builder for the Warnings panel. Centralized so the
+// per-row HTML shape (icon, text, source, timestamp, "Send fix order" button)
+// stays in lockstep with the data source.
+function _warningsRow(level, w, title) {
+  const lvl = (level === "error") ? "error" : "warn";
+  const icon = (lvl === "error") ? "⛔" : "⚠";
+  const source = w.source || "";
+  const ts = w.ts || "";
+  const rel = w.rel || (ts ? relTime(ts) : "—");
+  // Stable warning_id: source + ts is unique per file.
+  const wid = (source || "src") + "::" + (ts || Date.now());
+  const subBits = [];
+  if (rel) subBits.push(esc(rel));
+  if (source) subBits.push(`<span class="ts">${esc(source)}</span>`);
+  if (ts) subBits.push(`<span class="ts-iso">${esc(ts)}</span>`);
+  return (
+    `<div class="warnings-row ${lvl}" data-warning-id="${esc(wid)}" data-warning-text="${esc(title)}" data-warning-source="${esc(source)}" data-warning-ts="${esc(ts)}" data-warning-level="${esc(lvl)}">
+      <span class="meta">
+        <div class="title-line">${icon} ${esc(title)} ${badge(lvl, lvl === "error" ? "red" : "amber")}</div>
+        <div class="sub-line">${subBits.join(" · ")}</div>
+      </span>
+      <button class="fix-btn" onclick="sendFixOrder(this)">Send fix order to Thor</button>
+    </div>`
+  );
+}
+
+// ============================================================
+// 8. Pending Orders — Stage 19
+//     Reads /api/data/orders (sourced from events.jsonl, filtered
+//     to event_type=fix_order with status in pending|in_progress).
+//     Reuses .warnings-row patterns. Each row shows: order_id (mono),
+//     relative timestamp, source warning text, recommended fix,
+//     status pill (amber pending / blue in_progress), and requested_by.
+//     Buttons do NOT exist in this panel — orders are only acted on
+//     via chat confirmation ('Thor, do it' or 'Thor, execute
+//     pending order [id]'). Per NOFI directive 2026-06-11.
+// ============================================================
+function renderOrders(d) {
+  const hint = document.getElementById('orders-hint');
+  const root = document.getElementById('orders');
+  if (!root) return;
+  const orders = Array.isArray(d.orders) ? d.orders : [];
+  if (hint) {
+    const n = orders.length;
+    hint.textContent = n === 0
+      ? '0 pending'
+      : `${n} pending · awaiting chat confirmation`;
+  }
+  if (orders.length === 0) {
+    root.innerHTML = `
+      <div class="warnings-row ok">
+        <span class="meta">
+          <div class="title-line">✓ No pending orders — waiting for NOFI input.</div>
+          <div class="sub-line">Use the Warnings panel above to send a new fix order, or paste a structured order in chat.</div>
+        </span>
+      </div>`;
+    return;
+  }
+  root.innerHTML = orders.map(o => {
+    const status = (o.status || 'pending').toLowerCase();
+    const pillCls = status === 'in_progress' ? 'in_progress' : 'pending';
+    const rel = o.rel || relTime(o.ts);
+    const source = o.source || o.source_file || '';
+    const recFix = o.recommended_fix || '—';
+    const requestedBy = o.requested_by || 'nofi';
+    const orderId = o.order_id || '—';
+    return `
+      <div class="warnings-row warn" data-order-id="${esc(orderId)}">
+        <span class="meta">
+          <div class="title-line">
+            <span class="order-id">${esc(orderId)}</span>
+            ${esc(o.title || 'FIX ORDER')}
+            <span class="status-pill ${pillCls}">${esc(status)}</span>
+          </div>
+          <div class="sub-line">${esc(rel)} · <span class="ts">${esc(source || '00_company_os/events.jsonl')}</span></div>
+          <div class="sub-line" style="margin-top:4px"><b>Recommended fix:</b> ${esc(recFix)}</div>
+        </span>
+        <span class="requested-by" title="Requested by">by ${esc(requestedBy)}</span>
+      </div>`;
+  }).join('');
+}
+
+// Stage 17: send fix order to Thor. POSTs to /api/data/order. On 200,
+// the button briefly shows "✓ Order sent" then is disabled.
+async function sendFixOrder(btn) {
+  if (!btn || btn.dataset.sent === "1") return;
+  const row = btn.closest(".warnings-row");
+  if (!row) return;
+  const body = {
+    warning_id:   row.dataset.warningId   || "",
+    warning_text: row.dataset.warningText || "",
+    warning_source: row.dataset.warningSource || "",
+    warning_level:  row.dataset.warningLevel  || "warn",
+    ts: row.dataset.warningTs || new Date().toISOString(),
+  };
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  try {
+    const r = await authFetch("/api/data/order", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json().catch(() => ({}));
+    btn.dataset.sent = "1";
+    btn.classList.add("sent");
+    btn.textContent = "✓ Order sent";
+    // 2s feedback per spec
+    setTimeout(() => { btn.textContent = origText + " (sent)"; }, 2000);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "✗ failed — retry";
+    setTimeout(() => { btn.textContent = origText; }, 2000);
+  }
+}
+
+// ============================================================
+// Relative time
+// ============================================================
+function relTime(iso) {
+  if (!iso) return "—";
+  try {
+    const t = new Date(iso).getTime();
+    const diff = (Date.now() - t) / 1000;
+    if (diff < 60) return Math.floor(diff) + "s ago";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+    return Math.floor(diff / 86400) + "d ago";
+  } catch { return "—"; }
+}
+
+// ============================================================
+// Header pill updaters
+// ============================================================
+function updateHeaderPills(version, overview, logs) {
+  // Version subtitle (in topbar brand area)
+  const vp = document.getElementById('version-pill');
+  const vsub = document.getElementById('version-subtitle');
+  if (vp) vp.textContent = `v${version.version} · ${version.commit || 'live'}`;
+  if (vsub) vsub.textContent = `v${version.version} · ${version.commit || 'live'}`;
+
+  // Health pill
+  const hp = document.getElementById('health-pill');
+  if (hp) {
+    const ah = logs?.app_health || "unknown";
+    const cls = ah === "ok" ? "green" : ah === "degraded" ? "amber" : "red";
+    hp.className = `pill ${cls}`;
+    hp.textContent = `health: ${ah}`;
+  }
+
+  // Project pill
+  const pp = document.getElementById('project-pill');
+  if (pp) {
+    const pv = overview?.current_project?.value;
+    pp.className = pv ? "pill blue" : "pill gray";
+    pp.textContent = `project: ${pv || '—'}`;
+  }
+
+  // Verified pill
+  const vfp = document.getElementById('verified-pill');
+  if (vfp) {
+    const rel = logs?.last_verification_rel || "—";
+    vfp.className = "pill cyan";
+    vfp.textContent = `verified: ${rel}`;
+  }
+
+  // LAN pill (tech-detail)
+  const lan = document.getElementById('lan-pill');
+  if (lan) {
+    const ip = version.lan_ip || "127.0.0.1";
+    const port = version.port || 8767;
+    lan.textContent = `LAN: ${ip}:${port}`;
+  }
+}
+
+// ============================================================
+// 9. GitHub Connection (Stage 20 — additive, no other changes)
+// ============================================================
+function renderGitHub(d) {
+  const c = d.cron || {};
+  const l = d.local || {};
+  const r = d.repo || {};
+
+  const statusCls = d.status === "ok" ? "green" : d.status === "behind" ? "amber" : d.status === "failed" ? "red" : "gray";
+  const statusLabel = d.status === "ok" ? "in sync" : d.status === "behind" ? `${l.unpushed_commits || 0} unpushed` : d.status === "failed" ? "last push failed" : "unknown";
+  const outcomeCls = c.last_outcome === "success" ? "green" : c.last_outcome === "no_changes" ? "gray" : c.last_outcome === "failed" ? "red" : "amber";
+
+  const repoShort = r.url ? r.url.replace("https://github.com/", "").replace(".git", "") : "—";
+  const cells = [
+    { label: "Sync status",   value: badge(statusLabel, statusCls) },
+    { label: "Repo",          value: r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(repoShort)}</a>` : "—" },
+    { label: "Visibility",    value: esc(r.visibility || "—") },
+    { label: "Last push",     value: r.last_push_at ? new Date(r.last_push_at).toLocaleString() : "—" },
+    { label: "Local branch",  value: esc(l.branch || "—") },
+    { label: "Local HEAD",    value: l.last_commit_sha ? `<code>${esc((l.last_commit_sha || "").slice(0,8))}</code> <span class="muted">${esc((l.last_commit_msg || "").slice(0,50))}</span>` : "—" },
+    { label: "Unpushed",      value: l.unpushed_commits != null ? (l.unpushed_commits === 0 ? badge("0", "green") : badge(String(l.unpushed_commits), "amber")) : "—" },
+    { label: "Cron job",      value: c.job_id ? `<code>${esc(c.job_id.slice(0,12))}</code> · ${esc(c.name || "")}` : "—" },
+    { label: "Schedule",      value: esc(c.schedule || "—") },
+    { label: "Next run",      value: c.next_run ? new Date(c.next_run).toLocaleString() : "—" },
+    { label: "Last cron run", value: c.last_run ? new Date(c.last_run).toLocaleString() : "never" },
+    { label: "Last outcome",  value: badge(c.last_outcome || "unknown", outcomeCls) },
+    { label: "Last duration", value: c.last_duration_ms != null ? `${c.last_duration_ms} ms` : "—" },
+    { label: "Last msg",      value: c.last_message ? `<span class="muted">${esc(c.last_message.slice(0,60))}</span>` : "—" },
+    { label: "Last error",    value: c.last_error ? `<span class="dash" style="color:var(--red)">${esc(c.last_error.slice(0,80))}</span>` : "—" },
+  ];
+
+  $("#github").innerHTML = `<div class="health-grid">${cells.map(c => `
+    <div class="health-cell">
+      <span class="muted">${esc(c.label)}</span>
+      <div>${c.value}</div>
+    </div>`).join("")}</div>`;
+
+  const h = document.getElementById("github-hint");
+  if (h) h.textContent = `${d.status || "unknown"} · ${c.last_outcome || "never"}`;
+}
+
+// ============================================================
+// Main loader
+// ============================================================
+async function loadAll() {
+  // Stage 17: provider panel removed, but we still fetch /api/data/provider
+  // so the footer API-key pill (foot-key) keeps showing the correct state.
+  // No panel render function call — that function is gone.
+  const endpoints = [
+    ["overview", "/api/data/overview"],
+    ["agents",   "/api/data/agents"],
+    ["tasks",    "/api/data/tasks"],
+    ["projects", "/api/data/projects"],
+    ["provider", "/api/data/provider"],
+    ["logs",     "/api/data/logs"],
+    ["orders",   "/api/data/orders"],
+    ["github",   "/api/data/github"],
+  ];
+  const results = {};
+  await Promise.all(endpoints.map(async ([k, url]) => {
+    try { results[k] = await fetchJSON(url); }
+    catch (e) { results[k] = { error: e.message }; }
+  }));
+
+  renderOverview(results.overview || {});
+  renderAgents(results.agents || {});
+  renderActionRequired(
+    results.overview || {},
+    results.tasks    || {},
+    results.provider || {},
+    results.logs     || {},
+    results.projects || {}
+  );
+  renderTasks(results.tasks || {});
+  renderProjects(results.projects || {});
+  renderLogs(results.logs || {});
+  // Stage 17: new Warnings panel — needs logs (events) and overview (breakdown)
+  renderWarnings(results.logs || {}, results.overview || {});
+  // Stage 19: Pending Orders panel — reads /api/data/orders
+  renderOrders(results.orders || {});
+  // Stage 20: GitHub Connection panel — reads /api/data/github
+  renderGitHub(results.github || {});
+
+  refreshTasksCounts().then(() => {
+    if (results.tasks) renderTasks(results.tasks);
+  });
+
+  // Header pills (use logs + overview already loaded)
+  try {
+    const v = await fetchJSON("/api/version");
+    updateHeaderPills(v, results.overview || {}, results.logs || {});
+    // Footer
+    const up = v.uptime_sec;
+    $("#foot-version").textContent = `v${v.version} · ${v.commit || 'live'}`;
+    $("#foot-uptime").textContent = `up ${up < 60 ? up + "s" : Math.floor(up/60) + "m"}`;
+    const lanEl = $("#foot-lan");
+    if (lanEl) {
+      const ip = v.lan_ip || "127.0.0.1";
+      const port = v.port || 8767;
+      const note = v.lan_ip_auto ? "" : " (auto-detect failed)";
+      lanEl.textContent = `LAN: http://${ip}:${port}/${note}`;
+    }
+    if (results.provider?.providers) {
+      const paid = results.provider.providers.find(p => p.slot === "paid");
+      $("#foot-key").textContent = paid?.key_configured ? "API key: loaded" : "API key: not loaded";
+    }
+  } catch {}
+
+  // Last refreshed
+  const lr = document.getElementById("last-refreshed");
+  if (lr) {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    lr.textContent = `Last refreshed: ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} · auto-refresh: 5s`;
+  }
+}
+
+// 10. Kanban — Multi-Agent Board removed in MC-KANBAN-MOVE-1 (2026-06-16).
+// See kanban.html for the standalone page; this file now only renders the main view.
+
+// Wire up the Token button on the main page
+(function wireTokenBtn() {
+  const btn = document.getElementById("token-btn");
+  if (!btn) return;
+  function update() {
+    if (getStoredToken()) { btn.textContent = "🔑 Token ✓"; btn.style.color = "var(--green)"; btn.style.borderColor = "var(--green)"; }
+    else { btn.textContent = "🔑 Token"; btn.style.color = "var(--text2)"; btn.style.borderColor = "var(--line)"; }
+  }
+  btn.addEventListener("click", () => { promptForToken(); update(); });
+  update();
+})();
+
+loadAll();
+// MC-LIVE-REFRESH-1 (2026-06-18): auto-refresh every 5s. The footer text
+// used to say "auto-refresh: 30s" but there was no setInterval — the page
+// only refreshed on manual click. Fix: poll /api/data/* every 5s so the
+// agents panel + every other panel updates without page reload. The
+// heartbeat endpoint (POST /api/heartbeat) is pinged once per poll so a
+// viewer keeps the agent's "live" status fresh while looking at the page.
+setInterval(async () => {
+  try { await fetch("/api/heartbeat", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({agent: "thor"}) }); } catch {}
+  loadAll();
+}, 5000);
+
+// MC-CLOCK-1: live Dubai clock. Source of truth for all task timestamps.
+// Renders HH:MM:SS (24h, Dubai) + full date (weekday, day month year).
+// Uses Intl.DateTimeFormat with timeZone:'Asia/Dubai' so it's correct
+// regardless of the viewer's local timezone.
+(function tickClock() {
+  const timeEl = document.getElementById("clock-time");
+  const dateEl = document.getElementById("clock-date");
+  if (!timeEl || !dateEl) return;  // safety: clock DOM not present (shouldn't happen)
+  const fmtTime = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false, timeZone: "Asia/Dubai"
+  });
+  const fmtDate = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short", day: "2-digit", month: "short", year: "numeric",
+    timeZone: "Asia/Dubai"
+  });
+  function paint() {
+    const now = new Date();
+    timeEl.textContent = fmtTime.format(now);
+    dateEl.textContent = fmtDate.format(now);
+  }
+  paint();
+  // Align next tick to the start of the next second for a stable display.
+  const msToNextSecond = 1000 - (Date.now() % 1000);
+  setTimeout(function loop() {
+    paint();
+    setTimeout(loop, 1000);
+  }, msToNextSecond);
+})();
+</script>
+
+</main>
+</body>
+</html>

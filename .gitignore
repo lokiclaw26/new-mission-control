@@ -1,0 +1,49 @@
+# --- Secrets: never in the repo ---
+.env
+.env.*
+*.pem
+*.key
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Server runtime artifacts (regenerated on every run) ---
+code/logs/
+logs/
+*.pid
+*.tmp
+
+# --- Kanban automation runtime markers (written by the dispatch/execute crons) ---
+tasks/.dispatched-*
+tasks/.done-dispatched-*
+tasks/.executed-*
+
+# --- Heartbeat dotfiles (written by POST /api/heartbeat) ---
+.heartbeat-*
+**/.heartbeat-*
+
+# --- Memory graph runtime state (regenerable via the importer / rebuild endpoint) ---
+data/memory-graph.json
+data/memory-graph-events.jsonl
+data/memory-graph.sqlite3
+data/memory-graph.sqlite3-shm
+data/memory-graph.sqlite3-wal
+mg-*/
+
+# --- QA evidence artifacts (screenshots, run outputs) ---
+qa/**/*.png
+qa/**/results.json
+
+# --- Backups: use git history, not backup folders ---
+backups/
+code/backups/
+*.bak
+
+# --- OS / editor cruft ---
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/

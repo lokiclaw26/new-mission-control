@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Memory Graph — Mission Control</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; color: #e0e0e0; font-family: -apple-system, system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 180px; background: #111; border-right: 1px solid #2a2a2a; flex-shrink: 0; padding-top: 16px; }
+  .sidebar-header { color: #d4af37; font-weight: bold; padding: 8px 16px; font-size: 14px; letter-spacing: 0.5px; }
+  .sidebar a { display: block; padding: 10px 16px; color: #b8b8b8; text-decoration: none; font-size: 13px; border-left: 3px solid transparent; transition: all 0.15s; }
+  .sidebar a:hover { background: #1a1a1a; color: #e0e0e0; }
+  .sidebar a.active { color: #d4af37; border-left-color: #d4af37; background: rgba(212, 175, 55, 0.08); }
+  .sidebar-footer { position: absolute; bottom: 12px; left: 16px; right: 16px; font-size: 11px; color: #555; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header { background: #111; padding: 12px 20px; border-bottom: 1px solid #2a2a2a; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; color: #e0e0e0; font-weight: 600; }
+  header h1 .subtitle { color: #888; font-size: 13px; font-weight: normal; margin-left: 12px; }
+  .connection-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #888; }
+  .connection-status .dot { width: 10px; height: 10px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+  .connection-status .dot.error { background: #e74c3c; box-shadow: 0 0 6px #e74c3c; }
+  .hamburger { display: none; background: transparent; border: 1px solid #2a2a2a; color: #d4af37; padding: 6px 10px; border-radius: 3px; cursor: pointer; font-size: 16px; line-height: 1; }
+  .hamburger:hover { background: #1a1a1a; }
+  .layout { flex: 1; display: flex; min-height: 0; }
+  .controls { width: 300px; background: #111; border-right: 1px solid #2a2a2a; padding: 16px; overflow-y: auto; flex-shrink: 0; }
+  .controls h3 { font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 8px; letter-spacing: 1px; }
+  .controls input[type="text"] { width: 100%; padding: 8px 10px; background: #0a0a0a; border: 1px solid #2a2a2a; color: #e0e0e0; border-radius: 3px; font-size: 13px; margin-bottom: 16px; }
+  .controls fieldset { border: 1px solid #2a2a2a; border-radius: 4px; padding: 10px; margin-bottom: 16px; }
+  .controls fieldset legend { color: #888; font-size: 11px; text-transform: uppercase; padding: 0 6px; }
+  .controls label { display: block; font-size: 13px; padding: 3px 0; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .controls label input[type="checkbox"] { accent-color: #d4af37; }
+  .controls .kind-color { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .controls .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+  .controls input[type="range"] { flex: 1; accent-color: #d4af37; }
+  .controls button { width: 100%; padding: 8px; background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 3px; cursor: pointer; font-size: 12px; margin-top: 8px; }
+  .controls button:hover { background: rgba(231, 76, 60, 0.3); }
+  .graph-container { flex: 1; position: relative; background: #0a0a0a; min-width: 0; }
+  #graph { position: absolute; inset: 0; }
+  .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #888; font-size: 14px; font-style: italic; background: rgba(10,10,10,0.85); z-index: 10; pointer-events: none; }
+  .right-panel { width: 350px; background: #111; border-left: 1px solid #2a2a2a; display: flex; flex-direction: column; flex-shrink: 0; }
+  .right-panel section { padding: 12px 16px; border-bottom: 1px solid #2a2a2a; }
+  .right-panel h3 { font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 8px; letter-spacing: 1px; }
+  .event-feed { flex: 1; overflow-y: auto; max-height: 35%; }
+  .event-feed ul { list-style: none; padding: 0; }
+  .event-feed li { padding: 5px 0; font-size: 11px; color: #b8b8b8; font-family: monospace; border-bottom: 1px solid #1a1a1a; }
+  .event-feed li .ev-type { color: #d4af37; }
+  .inspector { flex: 1; overflow-y: auto; }
+  .inspector h2 { font-size: 16px; color: #d4af37; margin-bottom: 6px; word-break: break-word; }
+  .inspector .insp-id { font-family: monospace; font-size: 11px; color: #888; margin-bottom: 10px; word-break: break-all; }
+  .inspector .insp-kind { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-bottom: 10px; color: #fff; text-transform: uppercase; letter-spacing: 0.5px; }
+  .inspector .insp-summary { font-size: 13px; color: #b8b8b8; margin-bottom: 12px; line-height: 1.4; word-break: break-word; }
+  .inspector .insp-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #1a1a1a; }
+  .inspector .insp-row .label { color: #888; }
+  .inspector .insp-row .value { color: #e0e0e0; font-family: monospace; }
+  .inspector .insp-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+  .inspector .insp-tag { background: #1a1a1a; border: 1px solid #2a2a2a; padding: 2px 8px; border-radius: 10px; font-size: 10px; color: #b8b8b8; }
+  .inspector .insp-section-title { font-size: 11px; text-transform: uppercase; color: #888; margin-top: 12px; margin-bottom: 4px; letter-spacing: 0.5px; }
+  .inspector .insp-source { font-family: monospace; font-size: 10px; color: #555; word-break: break-all; }
+  footer { background: #111; padding: 8px 20px; border-top: 1px solid #2a2a2a; display: flex; gap: 24px; font-size: 11px; color: #888; flex-wrap: wrap; }
+  footer .metric { display: flex; align-items: center; gap: 6px; }
+  footer .metric strong { color: #d4af37; }
+  footer .metric .total { color: #555; }
+  .empty { color: #555; font-style: italic; font-size: 12px; }
+  /* MC-MEMORY-GRAPH-4-GLOBAL (2026-06-17): scope banner. */
+  .scope-banner { padding: 8px 20px; background: #1a1a0a; border-bottom: 1px solid #2a2a2a; color: #d4af37; font-size: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .scope-banner .scope-label { font-weight: 600; }
+  .scope-banner .scope-stats { color: #888; font-family: monospace; font-size: 11px; }
+  /* MC-LIVE-MEMORY-GRAPH-1 (2026-06-19): live top-corner count badge. */
+  .live-count {
+    position: fixed; top: 12px; right: 12px; z-index: 50;
+    background: rgba(20,20,20,0.92); color: #d4af37;
+    border: 1px solid #2a2a2a; border-radius: 4px;
+    padding: 6px 10px; font-size: 12px; font-family: monospace;
+    display: flex; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .live-count .lbl { color: #888; font-weight: normal; }
+  .live-count .num { color: #d4af37; font-weight: bold; }
+  .live-count .pulse { color: #2ecc71; }
+  .live-count .stale { color: #e74c3c; }
+  /* MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): small banner that names the
+     currently-shining node. Sits under the live-count chip. */
+  .shine-banner {
+    position: fixed; top: 50px; right: 12px; z-index: 50;
+    background: rgba(20,20,20,0.92);
+    border: 1px solid #2a2a2a; border-radius: 4px;
+    padding: 6px 10px; font-size: 11px; font-family: monospace;
+    color: #d4af37; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    display: flex; gap: 8px; align-items: center; max-width: 320px;
+  }
+  .shine-banner .shine-lbl { color: #d4af37; font-weight: bold; white-space: nowrap; }
+  .shine-banner .shine-id  { color: #888; word-break: break-all; }
+  .shine-banner.clickable  { cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  .shine-banner.clickable:hover { background: rgba(40,40,40,0.95); border-color: #d4af37; }
+  @media (max-width: 640px) {
+    .shine-banner { top: 48px; right: 6px; max-width: 200px; font-size: 10px; }
+  }
+  .scope-banner.scope-mission-control { background: #0f1a1a; color: #4a9eff; }
+  .scope-banner.scope-project { background: #0f1a0f; color: #2ecc71; }
+  .scope-banner.scope-agent { background: #1a0f1a; color: #9b59b6; }
+  .scope-banner.scope-kind { background: #1a140a; color: #ff9f43; }
+  .scope-banner.scope-session { background: #1a0f0f; color: #e74c3c; }
+  .controls select { width: 100%; padding: 6px 8px; background: #0a0a0a; border: 1px solid #2a2a2a; color: #e0e0e0; border-radius: 3px; font-size: 12px; margin-bottom: 8px; }
+  .controls .filter-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+  .controls .filter-row label { display: block; font-size: 11px; color: #888; margin-bottom: 2px; }
+
+  /* Responsive: tablet and below — collapse sidebar to top bar */
+  @media (max-width: 900px) {
+    body { flex-direction: column; height: 100vh; }
+    .sidebar { display: none; }
+    .hamburger { display: inline-block; }
+    .layout { flex-direction: column; }
+    .controls { width: 100%; max-height: 200px; order: 2; border-right: none; border-top: 1px solid #2a2a2a; }
+    .graph-container { order: 1; min-height: 400px; }
+    .right-panel { width: 100%; max-height: 250px; order: 3; border-left: none; border-top: 1px solid #2a2a2a; }
+  }
+  /* Responsive: phone — drawers hidden by default, toggled by hamburger */
+  @media (max-width: 600px) {
+    .controls, .right-panel { display: none; }
+    .controls.open, .right-panel.open { display: block; }
+    .graph-container { min-height: 320px; }
+    header h1 { font-size: 15px; }
+    header h1 .subtitle { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sidebar-header">⚡ NofiTech</div>
+    <a href="/">⚡ Main</a>
+    <a href="/kanban">🗂 Kanban</a>
+    <a href="/memory-graph" class="active">🧠 Memory Graph</a>
+    <div class="sidebar-footer" id="version">v1.17.0+3d</div>
+  </div>
+  <div class="main">
+    <!-- MC-LIVE-MEMORY-GRAPH-1 (2026-06-19): live top-corner count. -->
+    <div class="live-count" id="live-count" title="Live node/edge counts (auto-refresh 5s)">
+      <span><span class="lbl">nodes</span> <span class="num" id="lc-nodes">0</span></span>
+      <span><span class="lbl">edges</span> <span class="num" id="lc-edges">0</span></span>
+      <span class="pulse" id="lc-pulse">●</span>
+    </div>
+    <!-- MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): the id of the currently
+         shining node (most recently created). Sits below the live-count
+         chip so users can see which node is the focus. Click to fly the
+         3D camera back to the star if the user has panned away. -->
+    <div id="shine-banner" class="shine-banner clickable" title="Click to fly to the star" role="button" tabindex="0">
+      <span class="shine-lbl">⭐ Latest</span>
+      <span class="shine-id" id="shine-target">—</span>
+    </div>
+    <header>
+      <h1>Memory Graph <span class="subtitle">Hermes working memory</span></h1>
+      <div class="connection-status">
+        <span class="dot" id="conn-dot"></span>
+        <span id="conn-text">polling 5s</span>
+        <button class="hamburger" id="hamburger" aria-label="Toggle panels">☰</button>
+      </div>
+    </header>
+    <!-- MC-MEMORY-GRAPH-4-GLOBAL (2026-06-17): scope banner. -->
+    <div class="scope-banner scope-all" id="scope-banner">
+      <span class="scope-label">Full Hermes Memory</span>
+      <span class="scope-stats" id="scope-stats">—</span>
+    </div>
+    <div class="layout">
+      <aside class="controls">
+        <!-- MC-MEMORY-GRAPH-4-GLOBAL (2026-06-17): scope selector + filters. -->
+        <h3>Scope</h3>
+        <select id="scope">
+          <option value="all" selected>Full Hermes Memory</option>
+          <option value="mission-control">Mission Control (project)</option>
+          <option value="project">Project…</option>
+          <option value="agent">Agent…</option>
+          <option value="kind">Kind…</option>
+          <option value="session">Recent Session (24h)</option>
+        </select>
+        <div class="filter-row">
+          <div style="flex:1">
+            <label>Project</label>
+            <select id="filter-project">
+              <option value="">—</option>
+            </select>
+          </div>
+          <div style="flex:1">
+            <label>Agent</label>
+            <select id="filter-agent">
+              <option value="">—</option>
+              <option value="thor">thor</option>
+              <option value="forge">forge</option>
+              <option value="argus">argus</option>
+            </select>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div style="flex:1">
+            <label>Since (ISO)</label>
+            <input type="text" id="filter-since" placeholder="2026-06-01T00:00:00" />
+          </div>
+          <div style="flex:1">
+            <label>Until (ISO)</label>
+            <input type="text" id="filter-until" placeholder="" />
+          </div>
+        </div>
+        <h3>Search</h3>
+        <input type="text" id="search" placeholder="Filter by id / label / summary..." />
+        <fieldset>
+          <legend>Filter by kind</legend>
+          <label><input type="checkbox" value="goal" checked /> <span class="kind-color" style="background:#d4af37"></span> Goal</label>
+          <label><input type="checkbox" value="task" checked /> <span class="kind-color" style="background:#4a9eff"></span> Task</label>
+          <label><input type="checkbox" value="memory" checked /> <span class="kind-color" style="background:#b8b8b8"></span> Memory</label>
+          <label><input type="checkbox" value="decision" checked /> <span class="kind-color" style="background:#ff9f43"></span> Decision</label>
+          <label><input type="checkbox" value="tool" checked /> <span class="kind-color" style="background:#9b59b6"></span> Tool</label>
+          <label><input type="checkbox" value="file" checked /> <span class="kind-color" style="background:#3498db"></span> File</label>
+          <label><input type="checkbox" value="error" checked /> <span class="kind-color" style="background:#e74c3c"></span> Error</label>
+          <label><input type="checkbox" value="concept" checked /> <span class="kind-color" style="background:#2ecc71"></span> Concept</label>
+          <label><input type="checkbox" value="entity" checked /> <span class="kind-color" style="background:#1abc9c"></span> Entity</label>
+          <label><input type="checkbox" value="session" checked /> <span class="kind-color" style="background:#95a5a6"></span> Session</label>
+          <label><input type="checkbox" value="message" checked /> <span class="kind-color" style="background:#34495e"></span> Message</label>
+        </fieldset>
+        <div class="slider-row">Min importance: <input type="range" id="importance" min="0" max="1" step="0.05" value="0" /> <span id="importance-val">0.00</span></div>
+        <button id="reset" title="Returns the 3D camera to origin. Does NOT delete data.">↻ Reset View</button>
+      </aside>
+      <div class="graph-container">
+        <div id="graph"></div>
+        <div class="empty-state" id="empty-state" style="display:none;">No nodes match current filters.</div>
+      </div>
+      <aside class="right-panel">
+        <section class="event-feed">
+          <h3>Recent Events</h3>
+          <ul id="events"></ul>
+        </section>
+        <section class="inspector">
+          <h3>Selected Node</h3>
+          <div id="node-details"><span class="empty">Click a node to see details</span></div>
+        </section>
+      </aside>
+    </div>
+    <footer>
+      <div class="metric">Nodes: <strong id="node-count">0</strong> / <span class="total" id="node-total">0</span></div>
+      <div class="metric">Edges: <strong id="edge-count">0</strong> / <span class="total" id="edge-total">0</span></div>
+      <div class="metric">Last updated: <span id="last-updated">—</span></div>
+    </footer>
+  </div>
+
+  <script src="vendor/three/three.min.js"></script>
+  <script src="vendor/3d-force-graph/3d-force-graph.min.js"></script>
+  <script>
+    const KIND_COLORS = {
+      goal: 0xd4af37, task: 0x4a9eff, memory: 0xb8b8b8, decision: 0xff9f43,
+      tool: 0x9b59b6, file: 0x3498db, error: 0xe74c3c, concept: 0x2ecc71,
+      entity: 0x1abc9c, session: 0x95a5a6, message: 0x34495e
+    };
+    const KIND_HEX = {
+      goal: '#d4af37', task: '#4a9eff', memory: '#b8b8b8', decision: '#ff9f43',
+      tool: '#9b59b6', file: '#3498db', error: '#e74c3c', concept: '#2ecc71',
+      entity: '#1abc9c', session: '#95a5a6', message: '#34495e'
+    };
+    const ACTIVE_EDGE_KINDS = ['created_from','used_tool','edited_file','caused_by','depends_on','blocked_by','resolved_by'];
+
+    let Graph = null;
+    let rawNodes = [];
+    let rawEdges = [];
+    let selectedNode = null;
+    let lastError = null;
+    let lastRenderedNodeJson = null;
+    let currentGraphInitialized = false;
+    let resizeDebounce = null;
+    // MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): exactly one node "shines" at
+    // any time — the most-recently-created node in the visible graph. When a
+    // newer node arrives, the previous star dims and the new one lights up.
+    let shiningNodeId = null;
+    let shineStartedAt = 0;       // performance.now() of last change
+    let shineFrameCb = null;      // requestAnimationFrame loop
+
+    // Persistent entity / project / tool nodes have been in the graph since
+    // import. We exclude them from "latest" so the star always lands on a
+    // freshly-emitted node (task / memory / decision / message etc.).
+    const SHINE_EXCLUDED_KINDS = new Set(['entity', 'project', 'tool', 'session', 'file']);
+    function pickLatestNodeId(nodes) {
+      let bestId = null;
+      let bestTs = -1;
+      for (const n of nodes) {
+        if (!n || !n.id) continue;
+        if (SHINE_EXCLUDED_KINDS.has(n.kind)) continue;
+        const ts = n.created || n.updated || '';
+        if (!ts) continue;
+        // Coerce to ms epoch for ordering (works for ISO 8601 strings).
+        const ms = Date.parse(ts);
+        if (Number.isNaN(ms)) continue;
+        if (ms > bestTs) { bestTs = ms; bestId = n.id; }
+      }
+      return bestId;
+    }
+
+    // Build a glowing star texture once and reuse it for every "shining" node.
+    // 4-point star with radial gradient + outer glow, additive blending.
+    let _starTexture = null;
+    function getStarTexture() {
+      if (_starTexture && typeof THREE !== 'undefined') return _starTexture;
+      if (typeof THREE === 'undefined') return null;
+      const SIZE = 128;
+      const c = document.createElement('canvas');
+      c.width = SIZE; c.height = SIZE;
+      const ctx = c.getContext('2d');
+      const cx = SIZE / 2, cy = SIZE / 2;
+      // Outer glow (additive-friendly: dark → bright cyan/gold)
+      const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, SIZE / 2);
+      grd.addColorStop(0.00, 'rgba(255, 255, 220, 1.0)');
+      grd.addColorStop(0.10, 'rgba(255, 230, 130, 0.95)');
+      grd.addColorStop(0.30, 'rgba(255, 200, 60, 0.55)');
+      grd.addColorStop(0.65, 'rgba(255, 160, 30, 0.15)');
+      grd.addColorStop(1.00, 'rgba(255, 140, 0, 0.0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      // 4-point star spikes (white-hot core)
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.translate(cx, cy);
+      for (let i = 0; i < 4; i++) {
+        ctx.rotate(Math.PI / 2);
+        const g = ctx.createLinearGradient(0, 0, 0, SIZE / 2);
+        g.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
+        g.addColorStop(0.4, 'rgba(255, 240, 180, 0.4)');
+        g.addColorStop(1.0, 'rgba(255, 200, 60, 0.0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(0, -4);
+        ctx.lineTo(3, -SIZE * 0.45);
+        ctx.lineTo(0, 0);
+        ctx.lineTo(-3, -SIZE * 0.45);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      _starTexture = tex;
+      return tex;
+    }
+
+    function makeShiningNodeObject() {
+      const tex = getStarTexture();
+      if (!tex) return undefined;
+      const group = new THREE.Group();
+      // Inner sprite (the bright body)
+      const spriteMat = new THREE.SpriteMaterial({
+        map: tex,
+        color: 0xffffff,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      // Scales are intentionally large so the star reads clearly even when the
+      // 3D camera is far from the latest node (typical default zoom level).
+      sprite.scale.set(36, 36, 1);
+      sprite.userData.role = 'star-core';
+      group.add(sprite);
+      // Outer halo (slightly larger, fainter — gives the bloom look)
+      const haloMat = new THREE.SpriteMaterial({
+        map: tex,
+        color: 0xfff4c8,
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true
+      });
+      const halo = new THREE.Sprite(haloMat);
+      halo.scale.set(80, 80, 1);
+      halo.userData.role = 'star-halo';
+      group.add(halo);
+      // Mark the group so the pulse loop can find it.
+      group.userData.isShiningStar = true;
+      group.userData.core = sprite;
+      group.userData.halo = halo;
+      return group;
+    }
+
+    function startShinePulse() {
+      if (shineFrameCb) return;
+      const tick = () => {
+        if (!Graph || !shiningNodeId) { shineFrameCb = null; return; }
+        // Find the latest node's threeObject across the engine's internal graphData.
+        const gd = Graph.graphData ? Graph.graphData() : null;
+        if (gd && gd.nodes) {
+          const node = gd.nodes.find(n => n && n.id === shiningNodeId);
+          const obj = node && node.__threeObj;
+          if (obj && obj.userData && obj.userData.isShiningStar) {
+            // Pulse: sine wave on a 1.4s cycle, scale 1.0 -> 1.55 -> 1.0.
+            const elapsed = (performance.now() - shineStartedAt) / 1000;
+            const phase = (Math.sin(elapsed * (Math.PI * 2 / 1.4)) + 1) / 2; // 0..1
+            const haloScale = 60 + phase * 50;          // 60 .. 110
+            const coreScale = 28 + phase * 16;          // 28 .. 44
+            const haloOpacity = 0.35 + phase * 0.45;    // 0.35 .. 0.80
+            const coreOpacity = 0.85 + phase * 0.15;    // 0.85 .. 1.00
+            if (obj.userData.halo && obj.userData.halo.material) {
+              obj.userData.halo.scale.set(haloScale, haloScale, 1);
+              obj.userData.halo.material.opacity = haloOpacity;
+            }
+            if (obj.userData.core && obj.userData.core.material) {
+              obj.userData.core.scale.set(coreScale, coreScale, 1);
+              obj.userData.core.material.opacity = coreOpacity;
+            }
+          }
+        }
+        shineFrameCb = requestAnimationFrame(tick);
+      };
+      shineFrameCb = requestAnimationFrame(tick);
+    }
+
+    function setShiningNode(newId) {
+      if (newId === shiningNodeId) return;
+      const previousShining = shiningNodeId;
+      // Force the graph to re-evaluate nodeThreeObject by re-sending the data
+      // (even when the id set is unchanged, e.g. when the API returns the same
+      // node but a different one is now the newest). The 3d-force-graph
+      // library re-runs nodeThreeObject only when graphData() is called with
+      // a fresh array reference, so we splice a no-op.
+      shiningNodeId = newId;
+      shineStartedAt = performance.now();
+      // MC-MEMORY-GRAPH-SHINING-FIX (2026-06-26): when the star changes, reheat
+      // the d3 simulation so the newest node gets an x/y/z assigned quickly.
+      // Without this, a newly-arrived node sits at (0,0,0) and the camera fly
+      // can race ahead of the simulation, ending up far from where the node
+      // eventually settles.
+      try { if (Graph && Graph.d3ReheatSimulation) Graph.d3ReheatSimulation(); } catch (e) {}
+      if (Graph && currentGraphInitialized) {
+        const gd = Graph.graphData();
+        if (gd && gd.nodes && gd.nodes.length) {
+          // Touch each node so the engine re-evaluates its threeObject.
+          const touched = gd.nodes.map(n => Object.assign({}, n));
+          Graph.graphData({ nodes: touched, links: gd.links || [] });
+        }
+      }
+      // Surface the change in the footer count chip area (re-purpose live-count).
+      const el = document.getElementById('shine-target');
+      if (el) {
+        el.textContent = newId
+          ? '⭐ ' + (newId.length > 32 ? newId.slice(0, 30) + '…' : newId)
+          : '⭐ —';
+        el.style.color = newId ? '#d4af37' : '#555';
+      }
+      startShinePulse();
+      // MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): auto-fly the camera to the
+      // new star so the user sees it land. The simulation may not have
+      // assigned x/y/z yet on the very first detection, so we poll briefly
+      // (max 30 frames ~500ms) before giving up.
+      if (newId && Graph && currentGraphInitialized) {
+        flyCameraToNode(newId, previousShining ? 1100 : 1400);
+      }
+    }
+
+    // MC-MEMORY-GRAPH-SHINING-FIX (2026-06-26): the previous MAX_ATTEMPTS=30
+    // (~500ms) was too short for the first-ever graph load, where 1700+ nodes
+    // start at (0,0,0) and the d3 simulation needs ~2s to scatter them into
+    // finite positions. Bump to 180 frames (~3s) and add a setTimeout safety
+    // net that fires AFTER the rAF chain regardless of outcome. The safety
+    // net also handles the case where the rAF chain was cancelled mid-flight
+    // because the star changed.
+    function flyCameraToNode(nodeId, durationMs) {
+      let attempts = 0;
+      const MAX_ATTEMPTS = 180;
+      let done = false;
+      const tryFly = () => {
+        if (done) return;
+        attempts++;
+        if (!Graph || !shiningNodeId || shiningNodeId !== nodeId) return;
+        const gd = Graph.graphData();
+        const node = (gd && gd.nodes) ? gd.nodes.find(n => n && n.id === nodeId) : null;
+        if (!node || !Number.isFinite(node.x)) {
+          if (attempts < MAX_ATTEMPTS) {
+            requestAnimationFrame(tryFly);
+          } else {
+            console.warn('shine: node x/y/z never assigned for', nodeId);
+          }
+          return;
+        }
+        done = true;
+        try {
+          Graph.cameraPosition(
+            { x: node.x, y: node.y, z: node.z + 90 },
+            { x: node.x, y: node.y, z: node.z },
+            durationMs
+          );
+          const ctrls = Graph.controls && Graph.controls();
+          if (ctrls && ctrls.target && ctrls.target.set) {
+            try { ctrls.target.set(node.x, node.y, node.z); } catch (e) {}
+          }
+        } catch (e) {
+          console.warn('shine: camera fly-to failed', e.message);
+        }
+      };
+      requestAnimationFrame(tryFly);
+      // Safety net: after 3500ms, force a fly regardless of rAF chain state.
+      // This catches: (a) rAF chain killed by a star change mid-flight, (b) the
+      // browser tab being throttled, (c) the simulation never assigning x/y/z
+      // (we still fly to origin as a last resort).
+      setTimeout(() => {
+        if (done) return;
+        if (!Graph || !shiningNodeId || shiningNodeId !== nodeId) return;
+        const gd = Graph.graphData();
+        const node = (gd && gd.nodes) ? gd.nodes.find(n => n && n.id === nodeId) : null;
+        if (!node) return;
+        // Fall back to (0,0,0) if simulation never assigned coords.
+        const x = Number.isFinite(node.x) ? node.x : 0;
+        const y = Number.isFinite(node.y) ? node.y : 0;
+        const z = Number.isFinite(node.z) ? node.z : 0;
+        done = true;
+        try {
+          Graph.cameraPosition(
+            { x: x, y: y, z: z + 90 },
+            { x: x, y: y, z: z },
+            Math.min(durationMs, 800)
+          );
+          const ctrls = Graph.controls && Graph.controls();
+          if (ctrls && ctrls.target && ctrls.target.set) {
+            try { ctrls.target.set(x, y, z); } catch (e) {}
+          }
+        } catch (e) {
+          console.warn('shine: safety-net camera fly-to failed', e.message);
+        }
+      }, 3500);
+    }
+
+    // MC-MEMORY-GRAPH-3A (2026-06-17): LAN writes (e.g. /api/memory-graph/reset)
+    // require MC_ADMIN_TOKEN. The browser cannot read the server's env, so the
+    // user pastes the token here (matching the kanban page's flow). The token
+    // is stored in localStorage. All write fetches go through authFetch().
+    const MG_TOKEN_KEY = "mc_admin_token";
+    function getStoredToken() {
+      try { return localStorage.getItem(MG_TOKEN_KEY) || ""; } catch (e) { return ""; }
+    }
+    function setStoredToken(v) {
+      try { if (v) localStorage.setItem(MG_TOKEN_KEY, v); else localStorage.removeItem(MG_TOKEN_KEY); } catch (e) {}
+    }
+    function promptForToken() {
+      const cur = getStoredToken();
+      const v = prompt("Paste MC_ADMIN_TOKEN (the value from start-mc.sh):", cur || "");
+      if (v === null) return;
+      setStoredToken(v.trim());
+      if (v.trim()) alert("Token saved. Write actions will now include X-MC-Admin-Token.");
+      else alert("Token cleared. Write actions will fail until you set one.");
+    }
+    async function authFetch(url, opts) {
+      opts = opts || {};
+      opts.cache = "no-store";
+      opts.headers = Object.assign({}, opts.headers || {});
+      opts.headers["Content-Type"] = opts.headers["Content-Type"] || "application/json";
+      const t = getStoredToken();
+      if (t) opts.headers["X-MC-Admin-Token"] = t;
+      const r = await fetch(url, opts);
+      if (r.status === 401 || r.status === 403) {
+        if (t) { if (confirm(`Server rejected the stored token (HTTP ${r.status}). Re-paste?`)) promptForToken(); }
+        else { promptForToken(); }
+      }
+      return r;
+    }
+
+    function getFilters() {
+      const kinds = [...document.querySelectorAll('.controls input[type=checkbox]:checked')].map(c => c.value);
+      const minImportance = parseFloat(document.getElementById('importance').value);
+      return { kinds, minImportance };
+    }
+
+    function applyFilters() {
+      if (!Graph) return;
+      const filters = getFilters();
+      const search = document.getElementById('search').value.toLowerCase();
+      const filteredNodes = rawNodes.filter(n => {
+        if (!filters.kinds.includes(n.kind)) return false;
+        if ((n.importance || 0) < filters.minImportance) return false;
+        if (search) {
+          const haystack = ((n.label || '') + ' ' + (n.id || '') + ' ' + (n.summary || '')).toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        return true;
+      });
+      const visibleIds = new Set(filteredNodes.map(n => n.id));
+      const filteredEdges = rawEdges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
+
+      // Update footer counts (filtered / total)
+      const totalNodes = rawNodes.length;
+      const totalEdges = rawEdges.length;
+      const nodeCountEl = document.getElementById('node-count');
+      const nodeTotalEl = document.getElementById('node-total');
+      const edgeCountEl = document.getElementById('edge-count');
+      const edgeTotalEl = document.getElementById('edge-total');
+      if (nodeCountEl) nodeCountEl.textContent = String(filteredNodes.length);
+      if (nodeTotalEl) nodeTotalEl.textContent = String(totalNodes);
+      if (edgeCountEl) edgeCountEl.textContent = String(filteredEdges.length);
+      if (edgeTotalEl) edgeTotalEl.textContent = String(totalEdges);
+
+      // Empty-state overlay
+      const emptyStateEl = document.getElementById('empty-state');
+      if (emptyStateEl) {
+        emptyStateEl.style.display = filteredNodes.length === 0 ? 'flex' : 'none';
+      }
+
+      // Preserve selected node across poll (Fix 2)
+      if (selectedNode) {
+        const stillThere = filteredNodes.find(n => n.id === selectedNode.id);
+        if (!stillThere) {
+          selectedNode = null;
+          lastRenderedNodeJson = null;
+          renderInspector();
+        }
+      }
+
+      // Fix 1: only call graphData() when the node-id set actually changed.
+      const existing = Graph.graphData() || { nodes: [], links: [] };
+      const currentIds = new Set((existing.nodes || []).map(n => n.id));
+      const newIds = new Set(filteredNodes.map(n => n.id));
+      const sameSize = currentIds.size === newIds.size;
+      let setsEqual = sameSize;
+      if (setsEqual) {
+        for (const id of newIds) { if (!currentIds.has(id)) { setsEqual = false; break; } }
+      }
+      if (setsEqual) {
+        // Identity-stable: do nothing on the simulation. Counts are already updated above.
+        return;
+      }
+
+      // Sets differ — build prevById to forward x/y/z/vx/vy/vz so positions don't snap.
+      const prevById = new Map();
+      for (const n of (existing.nodes || [])) prevById.set(n.id, n);
+      let addedAny = false;
+      const enriched = filteredNodes.map(n => {
+        const prev = prevById.get(n.id);
+        if (prev) {
+          // Carry forward physics state from the running simulation.
+          return Object.assign({}, n, {
+            x: prev.x, y: prev.y, z: prev.z,
+            vx: prev.vx, vy: prev.vy, vz: prev.vz
+          });
+        }
+        addedAny = true;
+        return n;
+      });
+
+      Graph.graphData({ nodes: enriched, links: filteredEdges });
+      currentGraphInitialized = true;
+      if (addedAny) {
+        try { Graph.d3ReheatSimulation(); } catch (e) {}
+      }
+    }
+
+    function formatDate(s) {
+      if (!s) return '—';
+      try {
+        const d = new Date(s);
+        if (isNaN(d.getTime())) return String(s);
+        return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+      } catch (e) { return String(s); }
+    }
+
+    function makeRow(label, value) {
+      const row = document.createElement('div');
+      row.className = 'insp-row';
+      const l = document.createElement('span');
+      l.className = 'label';
+      l.textContent = label;
+      const v = document.createElement('span');
+      v.className = 'value';
+      v.textContent = (value === null || value === undefined || value === '') ? '—' : String(value);
+      row.appendChild(l);
+      row.appendChild(v);
+      return row;
+    }
+
+    function makeSectionTitle(text) {
+      const t = document.createElement('div');
+      t.className = 'insp-section-title';
+      t.textContent = text;
+      return t;
+    }
+
+    function renderInspector() {
+      const el = document.getElementById('node-details');
+      // Wipe via DOM (safe: textContent clears children too, but we rebuild fresh)
+      while (el.firstChild) el.removeChild(el.firstChild);
+
+      if (!selectedNode) {
+        lastRenderedNodeJson = null;
+        const span = document.createElement('span');
+        span.className = 'empty';
+        span.textContent = 'Click a node to see details';
+        el.appendChild(span);
+        return;
+      }
+
+      // Detect change: stringify a clean subset of fields only (skip __threeObj, x/y/z, vx/vy/vz).
+      const cleanForDiff = {
+        id: selectedNode.id,
+        label: selectedNode.label,
+        kind: selectedNode.kind,
+        summary: selectedNode.summary,
+        status: selectedNode.status,
+        importance: selectedNode.importance,
+        confidence: selectedNode.confidence,
+        tags: selectedNode.tags,
+        created_at: selectedNode.created_at,
+        updated_at: selectedNode.updated_at,
+        project: selectedNode.project,
+        path: selectedNode.path,
+        url: selectedNode.url,
+        source: selectedNode.source
+      };
+      const diffKey = JSON.stringify(cleanForDiff);
+      if (diffKey === lastRenderedNodeJson) {
+        // No change — leave inspector as-is (don't churn DOM).
+        return;
+      }
+      lastRenderedNodeJson = diffKey;
+      while (el.firstChild) el.removeChild(el.firstChild);
+
+      // Label (h2, gold)
+      const h2 = document.createElement('h2');
+      h2.textContent = selectedNode.label || selectedNode.id || '(unnamed)';
+      el.appendChild(h2);
+
+      // id (mono gray)
+      const idEl = document.createElement('div');
+      idEl.className = 'insp-id';
+      idEl.textContent = 'id: ' + (selectedNode.id || '—');
+      el.appendChild(idEl);
+
+      // Kind badge
+      const kind = selectedNode.kind || 'unknown';
+      const badge = document.createElement('span');
+      badge.className = 'insp-kind';
+      badge.style.background = KIND_HEX[kind] || '#555';
+      badge.textContent = kind;
+      el.appendChild(badge);
+
+      // Summary
+      if (selectedNode.summary) {
+        const sum = document.createElement('div');
+        sum.className = 'insp-summary';
+        sum.textContent = selectedNode.summary;
+        el.appendChild(sum);
+      }
+
+      // Metadata rows
+      el.appendChild(makeRow('status', selectedNode.status));
+      el.appendChild(makeRow('importance', selectedNode.importance !== undefined ? Number(selectedNode.importance).toFixed(2) : null));
+      el.appendChild(makeRow('confidence', selectedNode.confidence !== undefined ? Number(selectedNode.confidence).toFixed(2) : null));
+
+      // Tags (chips)
+      if (Array.isArray(selectedNode.tags) && selectedNode.tags.length) {
+        el.appendChild(makeSectionTitle('tags'));
+        const tagsWrap = document.createElement('div');
+        tagsWrap.className = 'insp-tags';
+        for (const tag of selectedNode.tags) {
+          const chip = document.createElement('span');
+          chip.className = 'insp-tag';
+          chip.textContent = String(tag);
+          tagsWrap.appendChild(chip);
+        }
+        el.appendChild(tagsWrap);
+      }
+
+      // Dates
+      el.appendChild(makeSectionTitle('timestamps'));
+      el.appendChild(makeRow('created', formatDate(selectedNode.created_at)));
+      el.appendChild(makeRow('updated', formatDate(selectedNode.updated_at)));
+
+      // Project / path / url
+      const hasLoc = selectedNode.project || selectedNode.path || selectedNode.url;
+      if (hasLoc) {
+        el.appendChild(makeSectionTitle('location'));
+        if (selectedNode.project) el.appendChild(makeRow('project', selectedNode.project));
+        if (selectedNode.path) el.appendChild(makeRow('path', selectedNode.path));
+        if (selectedNode.url) el.appendChild(makeRow('url', selectedNode.url));
+      }
+
+      // Source
+      if (selectedNode.source) {
+        el.appendChild(makeSectionTitle('source'));
+        const src = document.createElement('div');
+        src.className = 'insp-source';
+        src.textContent = String(selectedNode.source);
+        el.appendChild(src);
+      }
+    }
+
+    // MC-MEMORY-GRAPH-4-GLOBAL (2026-06-17): scope/filter state.
+    const SCOPE_LABELS = {
+      'all': 'Full Hermes Memory',
+      'mission-control': 'Mission Control Memory',
+      'project': 'Project Memory',
+      'agent': 'Agent Memory',
+      'kind': 'Filter by Kind',
+      'session': 'Recent Session (24h)',
+    };
+    const SCOPE_CLASSES = {
+      'all': 'scope-all',
+      'mission-control': 'scope-mission-control',
+      'project': 'scope-project',
+      'agent': 'scope-agent',
+      'kind': 'scope-kind',
+      'session': 'scope-session',
+    };
+    function getScopeParams() {
+      const scopeEl = document.getElementById('scope');
+      const raw = scopeEl ? scopeEl.value : 'all';
+      const params = new URLSearchParams();
+      // "mission-control" is a convenience for scope=project&project=mission-control.
+      const scope = (raw === 'mission-control') ? 'project' : raw;
+      params.set('scope', scope || 'all');
+      const projectEl = document.getElementById('filter-project');
+      const projectVal = projectEl ? projectEl.value : '';
+      if (raw === 'mission-control') {
+        params.set('project', 'mission-control');
+      } else if (projectVal) {
+        params.set('project', projectVal);
+      }
+      const agentEl = document.getElementById('filter-agent');
+      const agentVal = agentEl ? agentEl.value : '';
+      if (agentVal) params.set('agent', agentVal);
+      const sinceEl = document.getElementById('filter-since');
+      const untilEl = document.getElementById('filter-until');
+      const sinceVal = sinceEl ? sinceEl.value.trim() : '';
+      const untilVal = untilEl ? untilEl.value.trim() : '';
+      if (sinceVal) params.set('since', sinceVal);
+      if (untilVal) params.set('until', untilVal);
+      return { raw, params };
+    }
+    function updateScopeBanner(rawScope, data) {
+      const banner = document.getElementById('scope-banner');
+      if (!banner) return;
+      const labelEl = banner.querySelector('.scope-label');
+      const statsEl = document.getElementById('scope-stats');
+      const label = SCOPE_LABELS[rawScope] || SCOPE_LABELS['all'];
+      if (labelEl) labelEl.textContent = label;
+      banner.className = 'scope-banner ' + (SCOPE_CLASSES[rawScope] || 'scope-all');
+      if (statsEl && data) {
+        const kind = data.metadata && data.metadata.scope_label ? data.metadata.scope_label : label;
+        const proj = data.metadata && data.metadata.project ? ` project=${data.metadata.project}` : '';
+        const agt = data.metadata && data.metadata.agent ? ` agent=${data.metadata.agent}` : '';
+        statsEl.textContent = `nodes=${data.node_count || 0} edges=${data.edge_count || 0} scope=${rawScope}${proj}${agt}`;
+      }
+    }
+
+    async function fetchGraph() {
+      try {
+        const { raw, params } = getScopeParams();
+        const url = '/api/memory-graph' + (params.toString() ? '?' + params.toString() : '');
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        rawNodes = data.nodes || [];
+        rawEdges = data.edges || [];
+        const lu = data.last_updated || '—';
+        const luEl = document.getElementById('last-updated');
+        if (luEl) luEl.textContent = lu;
+        document.getElementById('conn-dot').classList.remove('error');
+        document.getElementById('conn-text').textContent = 'polling 5s';
+        // MC-LIVE-MEMORY-GRAPH-1 (2026-06-19): update the live top-corner count.
+        const lcNodes = document.getElementById('lc-nodes');
+        const lcEdges = document.getElementById('lc-edges');
+        const lcPulse = document.getElementById('lc-pulse');
+        if (lcNodes) lcNodes.textContent = String(data.node_count || 0);
+        if (lcEdges) lcEdges.textContent = String(data.edge_count || 0);
+        if (lcPulse) {
+          lcPulse.className = 'pulse';
+          lcPulse.textContent = '●';
+        }
+        updateScopeBanner(raw, data);
+        applyFilters();
+        // MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): detect a newer node and
+        // move the star. This must happen AFTER applyFilters() so the
+        // nodeThreeObject callback evaluates against the new shiningNodeId
+        // when applyFilters() forces a graphData() rebuild.
+        const latest = pickLatestNodeId(rawNodes);
+        if (latest && latest !== shiningNodeId) {
+          setShiningNode(latest);
+        }
+      } catch (err) {
+        lastError = err.message;
+        document.getElementById('conn-dot').classList.add('error');
+        document.getElementById('conn-text').textContent = 'error: ' + err.message;
+        // Mark the live count as stale on error.
+        const lcPulse = document.getElementById('lc-pulse');
+        if (lcPulse) { lcPulse.className = 'stale'; lcPulse.textContent = '●'; }
+      }
+    }
+    // Populate the project dropdown from the API metadata.
+    async function populateProjectFilter() {
+      try {
+        const resp = await fetch('/api/memory-graph?scope=all');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const sel = document.getElementById('filter-project');
+        if (!sel) return;
+        // Discover project nodes from the response.
+        const projects = new Set();
+        for (const n of (data.nodes || [])) {
+          if (n.kind === 'project' && n.id && n.id.startsWith('project:')) {
+            projects.add(n.id.slice('project:'.length));
+          }
+        }
+        // Also keep the legacy default options.
+        const known = ['mission-control', 'diy-hub-v1', 'roguelike-v1'];
+        known.forEach(p => projects.add(p));
+        const sorted = Array.from(projects).sort();
+        for (const p of sorted) {
+          const opt = document.createElement('option');
+          opt.value = p; opt.textContent = p;
+          sel.appendChild(opt);
+        }
+      } catch (e) { /* best-effort */ }
+    }
+    // Wire scope + filter change events.
+    document.addEventListener('DOMContentLoaded', () => {
+      populateProjectFilter();
+      ['scope','filter-project','filter-agent','filter-since','filter-until']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.addEventListener('change', () => fetchGraph());
+        });
+    });
+
+    async function fetchEvents() {
+      try {
+        const resp = await fetch('/api/memory-graph/events/recent?n=20');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const ul = document.getElementById('events');
+        while (ul.firstChild) ul.removeChild(ul.firstChild);
+        const events = (data.events || []).slice(-20).reverse();
+        for (const ev of events) {
+          const li = document.createElement('li');
+          const typeSpan = document.createElement('span');
+          typeSpan.className = 'ev-type';
+          typeSpan.textContent = (ev.type || '?');
+          li.appendChild(typeSpan);
+          li.appendChild(document.createTextNode(' ' + (ev.node?.id || ev.edge?.source || '')));
+          ul.appendChild(li);
+        }
+      } catch (err) {}
+    }
+
+    function setGraphSize() {
+      if (!Graph) return;
+      const el = document.querySelector('.graph-container');
+      if (!el) return;
+      const w = Math.floor(el.clientWidth);
+      const h = Math.floor(el.clientHeight);
+      if (w > 0 && h > 0) {
+        try { Graph.width(w).height(h); } catch (e) {}
+      }
+    }
+
+    function initGraph() {
+      if (typeof ForceGraph3D !== 'function') {
+        document.getElementById('graph').innerHTML = '<div class="empty" style="padding:20px">3d-force-graph not loaded. Check vendor/ directory.</div>';
+        return;
+      }
+      Graph = ForceGraph3D()(document.getElementById('graph'))
+        .backgroundColor('#0a0a0a')
+        .nodeId('id')
+        .nodeLabel(n => n.label || n.id || '?')
+        .nodeColor(n => {
+          // The "shining" latest node gets a bright white-gold so it reads
+          // as the visual focus even before the halo sprite lands.
+          if (shiningNodeId && n && n.id === shiningNodeId) return 0xfff4c8;
+          return KIND_COLORS[n.kind] || 0x888888;
+        })
+        .nodeVal(n => {
+          // The shining node is bigger so it pulls the eye in 3D too.
+          if (shiningNodeId && n && n.id === shiningNodeId) return 12 + (n.importance || 0) * 10;
+          return 1 + (n.importance || 0) * 8;
+        })
+        .nodeRelSize(4)
+        // MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): the latest-created node
+        // gets a custom THREE.Group containing a star sprite + halo. All
+        // other nodes fall back to the engine's default sphere.
+        .nodeThreeObject(n => {
+          if (!shiningNodeId || !n || n.id !== shiningNodeId) return undefined;
+          return makeShiningNodeObject();
+        })
+        .nodeThreeObjectExtend(false)
+        .linkSource('source')
+        .linkTarget('target')
+        .linkColor(() => 'rgba(212, 175, 55, 0.4)')
+        .linkWidth(l => (l.weight || 0.5) * 2)
+        .linkDirectionalParticles(l => ACTIVE_EDGE_KINDS.includes(l.kind) ? 4 : 0)
+        .linkDirectionalParticleSpeed(0.006)
+        .linkDirectionalParticleColor(() => '#d4af37')
+        .linkDirectionalParticleResolution(8)
+        .onNodeClick(n => {
+          selectedNode = n;
+          renderInspector();
+        });
+
+      // Initial size + camera
+      setGraphSize();
+      try { Graph.cameraPosition({ x: 0, y: 0, z: 250 }); } catch (e) {}
+
+      // MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): expose a tiny debug hook
+      // on window so Argus / Playwright can introspect the live state without
+      // having to scrape the THREE scene tree. Read-only references.
+      window.__mc = {
+        get Graph() { return Graph; },
+        get shiningNodeId() { return shiningNodeId; },
+        get rawNodeCount() { return rawNodes.length; },
+        get latestNodeId() { return pickLatestNodeId(rawNodes); }
+      };
+
+      // ResizeObserver on the container (Fix 3) — debounced.
+      const container = document.querySelector('.graph-container');
+      if (container && typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(entries => {
+          if (!Graph) return;
+          if (resizeDebounce) clearTimeout(resizeDebounce);
+          resizeDebounce = setTimeout(() => {
+            const { width, height } = entries[0].contentRect;
+            if (width > 0 && height > 0) {
+              try { Graph.width(Math.floor(width)).height(Math.floor(height)); } catch (e) {}
+            }
+          }, 200);
+        });
+        ro.observe(container);
+      } else {
+        window.addEventListener('resize', () => {
+          if (resizeDebounce) clearTimeout(resizeDebounce);
+          resizeDebounce = setTimeout(setGraphSize, 200);
+        });
+      }
+    }
+
+    // Hamburger toggle (mobile)
+    document.getElementById('hamburger').addEventListener('click', () => {
+      const c = document.querySelector('.controls');
+      const r = document.querySelector('.right-panel');
+      if (c) c.classList.toggle('open');
+      if (r) r.classList.toggle('open');
+    });
+
+    // Wire up filters
+    document.getElementById('search').addEventListener('input', applyFilters);
+    document.querySelectorAll('.controls input[type=checkbox]').forEach(cb => cb.addEventListener('change', applyFilters));
+    document.getElementById('importance').addEventListener('input', (e) => {
+      document.getElementById('importance-val').textContent = parseFloat(e.target.value).toFixed(2);
+      applyFilters();
+    });
+    // MC-LIVE-MEMORY-GRAPH-1 (2026-06-19): "Reset View" — visual only.
+    // The DB is NEVER touched. The 3D camera just returns to its origin.
+    // Optionally, if the auth token is set, we still call the endpoint
+    // (which itself is now a no-op for the DB) so the server can record
+    // a `view_reset` event in the audit log.
+    document.getElementById('reset').addEventListener('click', async () => {
+      try {
+        if (Graph) {
+          // 1. Move the 3D camera back to its origin (no DB hit).
+          try { Graph.cameraPosition({ x: 0, y: 0, z: 250 }, { x: 0, y: 0, z: 0 }, 700); } catch (e) {}
+          // 2. Reheat the simulation so the layout settles around origin.
+          try { Graph.d3ReheatSimulation(); } catch (e) {}
+        }
+        // 3. Notify the server (auth-gated) so the audit log records
+        //    the click. The server endpoint is the visual-only one.
+        const r = await authFetch('/api/memory-graph/reset', { method: 'POST' });
+        if (!r.ok) {
+          // Not fatal — visual reset already worked. Just log it.
+          console.warn('reset_view server notify failed:', r.status);
+        }
+        // 4. Immediately re-render (the next 5s poll will do this too,
+        //    but we want the inspector / counts to refresh now).
+        await fetchGraph();
+        await fetchEvents();
+      } catch (err) {
+        console.warn('reset_view error:', err.message);
+      }
+    });
+
+    // Polling
+    setInterval(fetchGraph, 5000);
+
+    // MC-MEMORY-GRAPH-SHINING-STAR (2026-06-20): click the "Latest" banner
+    // to fly the 3D camera back to the shining star (in case the user
+    // orbited/zoomed away from it).
+    function wireShineBanner() {
+      const banner = document.getElementById('shine-banner');
+      if (!banner) return;
+      const handler = (ev) => {
+        if (!shiningNodeId || !Graph) return;
+        try { ev.preventDefault(); } catch (e) {}
+        try { flyCameraToNode(shiningNodeId, 900); } catch (e) {}
+      };
+      banner.addEventListener('click', handler);
+      banner.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') handler(ev);
+      });
+    }
+    setInterval(fetchEvents, 5000);
+
+    // Init
+    initGraph();
+    wireShineBanner();
+    fetchGraph().then(() => fetchEvents());
+  </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntax check (all server modules)
+        run: python -m compileall -q code
+
+      - name: Run machine-independent test suites
+        # test_global_store, test_agents_live, and test_import contain
+        # assertions tied to the production host's filesystem
+        # (/home/nofidofi/NofiTech-Ind, live agent logs) and only fully
+        # pass there — run them on the server, not in CI.
+        run: >
+          python -m unittest -v
+          tests.test_auth
+          tests.test_redaction
+          tests.test_redaction_preserves_ids
+          tests.test_kanban
+          tests.test_graph
+          tests.test_heartbeat
+          tests.test_reset
+          tests.test_scoped_api
+          tests.test_import_idempotent
+          tests.test_import_no_dangling
+          tests.test_overview_live
