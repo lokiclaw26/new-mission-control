@@ -2334,10 +2334,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        if full.suffix == ".html":
-            ctype = "text/html; charset=utf-8"
-        else:
-            ctype = "application/octet-stream"
+        # Correct MIME matters now that every response is nosniff: the browser
+        # refuses to execute a <script> served as octet-stream (or text/plain),
+        # which is exactly what the vendored three.js/3d-force-graph are.
+        # Explicit map for the types we actually ship — mimetypes.guess_type
+        # can be skewed by OS registry entries, so don't trust it for these.
+        _STATIC_TYPES = {
+            ".html": "text/html; charset=utf-8",
+            ".js": "text/javascript; charset=utf-8",
+            ".mjs": "text/javascript; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+            ".json": "application/json; charset=utf-8",
+            ".svg": "image/svg+xml",
+            ".png": "image/png",
+            ".ico": "image/x-icon",
+        }
+        ctype = _STATIC_TYPES.get(full.suffix.lower())
+        if not ctype:
+            guessed, _enc = mimetypes.guess_type(str(full))
+            ctype = guessed or "application/octet-stream"
         body = full.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", ctype)
