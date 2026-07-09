@@ -56,6 +56,7 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -79,7 +80,9 @@ from security import redact_secrets  # noqa: E402
 log = logging.getLogger("mc.mg_import")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-REPO_ROOT = Path("/home/nofidofi/NofiTech-Ind")
+# NOFITECH_ROOT env var overrides the production default so tests and CI
+# can run on any machine; unset (the production server) keeps the old path.
+REPO_ROOT = Path(os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind")
 COMPANY_OS = REPO_ROOT / "00_company_os"
 PROJECTS_DIR = REPO_ROOT / "01_projects"
 HERMES_CRON = Path.home() / ".hermes" / "cron" / "output"

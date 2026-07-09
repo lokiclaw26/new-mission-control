@@ -8,6 +8,7 @@ assert_safe_path.
 """
 import shutil
 import sys
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,7 +61,7 @@ class PathResolutionTests(unittest.TestCase):
 class InitAndOpenTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="mg-global-",
-                                         dir="/home/nofidofi/NofiTech-Ind"))
+                                         dir=os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind"))
         self.db = self.tmp / "memory-graph.sqlite3"
 
     def tearDown(self):
@@ -105,7 +106,7 @@ class InitAndOpenTests(unittest.TestCase):
 class ScopedQueryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="mg-global-",
-                                         dir="/home/nofidofi/NofiTech-Ind"))
+                                         dir=os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind"))
         self.db = self.tmp / "memory-graph.sqlite3"
         self.s = GlobalMemoryGraphStore(self.db)
         # Seed a tiny graph.

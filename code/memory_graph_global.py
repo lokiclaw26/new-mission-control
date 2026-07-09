@@ -50,7 +50,9 @@ from typing import Any
 log = logging.getLogger("mc.mg_global")
 
 # --- Allowed path roots for safety checks -----------------------------
-_REPO_ROOT = Path("/home/nofidofi/NofiTech-Ind")
+# NOFITECH_ROOT env var overrides the production default so tests and CI
+# can run on any machine; unset (the production server) keeps the old path.
+_REPO_ROOT = Path(os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind")
 _ALLOWED_ROOTS = (
     _REPO_ROOT,
     Path.home() / ".hermes" / "cron" / "output",

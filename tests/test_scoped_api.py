@@ -9,6 +9,7 @@ the request URL we want to simulate.
 import json
 import shutil
 import sys
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -84,7 +85,7 @@ def _seed(store: GlobalMemoryGraphStore) -> None:
 class ScopedApiTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="mg-scope-",
-                                         dir="/home/nofidofi/NofiTech-Ind"))
+                                         dir=os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind"))
         self.db = self.tmp / "mg.sqlite3"
         self.store = GlobalMemoryGraphStore(self.db)
         # Patch the API module's global store singleton to use ours.

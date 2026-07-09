@@ -15,6 +15,7 @@ root) so the importer's assert_safe_path() check passes.
 import json
 import shutil
 import sys
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,7 +49,7 @@ def _make_universe(tmp: Path) -> Path:
 class ImporterParseTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="mg-import-",
-                                         dir="/home/nofidofi/NofiTech-Ind"))
+                                         dir=os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind"))
         self.repo = _make_universe(self.tmp)
         self.db = self.tmp / "mg.sqlite3"
         self.store = GlobalMemoryGraphStore(self.db)

@@ -35,7 +35,8 @@ _LOOPBACK_IPS = {"127.0.0.1", "::1", "localhost"}
 # Where start-mc.sh lives — used as a fallback source for MC_ADMIN_TOKEN
 # so the server doesn't have to be started from a shell that already
 # exported the variable. If start-mc.sh sets it, we honor that.
-_START_MC_PATH = Path("/home/nofidofi/NofiTech-Ind/start-mc.sh")
+# NOFITECH_ROOT env var overrides the production default (tests/CI/portability).
+_START_MC_PATH = Path(os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind") / "start-mc.sh"
 
 _admin_token_cache: str | None = None
 

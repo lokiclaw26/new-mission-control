@@ -6,6 +6,7 @@ produce duplicate nodes or edges.
 import json
 import shutil
 import sys
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,7 +21,7 @@ from memory_graph_import import MemoryGraphImporter  # noqa: E402
 class IdempotencyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="mg-idem-",
-                                         dir="/home/nofidofi/NofiTech-Ind"))
+                                         dir=os.environ.get("NOFITECH_ROOT") or "/home/nofidofi/NofiTech-Ind"))
         self.repo = self.tmp
         (self.repo / "00_company_os").mkdir(parents=True, exist_ok=True)
         (self.repo / "00_company_os" / "04_agents" / "logs" / "2026-06-17").mkdir(

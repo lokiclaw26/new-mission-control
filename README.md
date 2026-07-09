@@ -88,7 +88,7 @@ python3 -m unittest discover -s tests
 
 ## Known limitations
 
-- A few modules still hardcode the production paths (`/home/nofidofi/NofiTech-Ind` in `memory_graph_global.py`, `memory_graph_import.py`, `security.py`) and the LAN IP (`192.168.0.29` in `start-mc.sh`, `scripts/kanban-delegate.sh`). Centralizing these behind a `NOFITECH_ROOT` env var is the next planned refactor.
+- The company-root path defaults to the production server's `/home/nofidofi/NofiTech-Ind` in `memory_graph_global.py`, `memory_graph_import.py`, and `security.py`; set the **`NOFITECH_ROOT`** env var to override it (CI does this). The LAN IP (`192.168.0.29`) is still hardcoded in `start-mc.sh` and `scripts/kanban-delegate.sh`, and the shell scripts don't honor `NOFITECH_ROOT` yet — finishing that centralization is the next planned refactor.
 - `serve.py` is a single large module; the kanban/memory-graph/security logic is already split out, and the remaining `data_*()` panels are next.
 - Task history lives in `tasks/` indefinitely; an archival policy for done tasks is planned.
 

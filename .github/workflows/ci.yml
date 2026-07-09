@@ -22,6 +22,10 @@ jobs:
         # assertions tied to the production host's filesystem
         # (/home/nofidofi/NofiTech-Ind, live agent logs) and only fully
         # pass there — run them on the server, not in CI.
+        env:
+          # Redirect the memory-graph/security path roots away from the
+          # production default so temp-dir fixtures resolve on the runner.
+          NOFITECH_ROOT: ${{ github.workspace }}
         run: >
           python -m unittest -v
           tests.test_auth
