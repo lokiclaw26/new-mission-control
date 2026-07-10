@@ -39,3 +39,8 @@ curl -o code/vendor/3d-force-graph/3d-force-graph.min.js \
 curl -o code/vendor/three/three.min.js \
   https://unpkg.com/three@0.160.0/build/three.min.js
 ```
+
+## inter/
+Inter variable font (InterVariable.woff2) by Rasmus Andersson — https://rsms.me/inter/
+License: SIL Open Font License 1.1. Vendored 2026-07-10 (MC-UI-CONSOLE-1) so the
+dashboard typography works fully offline (no CDN).

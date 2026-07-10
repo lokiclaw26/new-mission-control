@@ -87,7 +87,7 @@ START_TIME = time.time()
 
 # v1.10.0 — live version: read from git at request time (no restart needed).
 # Fallback to manual values if git is unavailable or this is a fresh checkout.
-FALLBACK_VERSION = "1.18.0"  # MC-UI-POLISH-1: shared theme, mobile layout, kanban/graph polish
+FALLBACK_VERSION = "1.19.0"  # MC-UI-CONSOLE-1: console layout, Inter font, agent hero cards, honest heartbeats
 FALLBACK_COMMIT = "live"
 
 def _git(*args):
@@ -2356,6 +2356,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ".svg": "image/svg+xml",
             ".png": "image/png",
             ".ico": "image/x-icon",
+            ".woff2": "font/woff2",
         }
         ctype = _STATIC_TYPES.get(full.suffix.lower())
         if not ctype:

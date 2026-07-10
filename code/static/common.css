@@ -9,6 +9,16 @@
    page-specific styles inline; only shared things live here.
    ============================================================ */
 
+/* MC-UI-CONSOLE-1 (2026-07-10): vendored Inter variable font (SIL OFL).
+   Served from /vendor/inter/ — no CDN, works fully offline. */
+@font-face {
+  font-family: "Inter";
+  src: url("/vendor/inter/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* Surfaces + lines (GitHub-dark family) */
   --bg: #0e1116;
@@ -16,6 +26,18 @@
   --panel-2: #1c232c;
   --line: #30363d;
   --line-soft: #21262d;
+
+  /* MC-UI-CONSOLE-1: depth + shape tokens. Cards get soft shadows and a
+     1px "lit from above" top edge instead of uniform 1px borders. */
+  --radius: 12px;
+  --radius-sm: 10px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.22);
+  --shadow-2: 0 2px 4px rgba(0,0,0,0.5), 0 10px 28px rgba(0,0,0,0.32);
+  --edge: inset 0 1px 0 rgba(255,255,255,0.045);
+
+  /* The one signature accent — used sparingly (active nav, primary
+     actions, live elements). Everything else stays neutral. */
+  --accent-grad: linear-gradient(135deg, #58a6ff 0%, #bc8cff 100%);
 
   /* Ink */
   --text: #e6edf3;
@@ -39,8 +61,59 @@
   --argus-color: #f778ba;
 
   /* Typography: sans for UI, mono ONLY for ids / versions / log lines */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Inter everywhere; pages that predate the token pick it up too. */
+body { font-family: var(--font-sans); }
+
+/* ---------- Toasts (replace alert()/confirm() popups) ---------- */
+#mc-toasts {
+  position: fixed; right: 16px; bottom: 16px; z-index: 20000;
+  display: flex; flex-direction: column; gap: 8px; max-width: 340px;
+}
+.mc-toast {
+  background: var(--panel-2);
+  color: var(--text);
+  border-left: 3px solid var(--cyan);
+  border-radius: 8px;
+  box-shadow: var(--shadow-2), var(--edge);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  animation: mc-toast-in 0.18s ease-out;
+}
+.mc-toast.error { border-left-color: var(--red); }
+.mc-toast.ok    { border-left-color: var(--green); }
+@keyframes mc-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Skeleton shimmer for first paint ---------- */
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(100deg, var(--panel-2) 40%, rgba(255,255,255,0.05) 50%, var(--panel-2) 60%);
+  background-size: 200% 100%;
+  animation: mc-shimmer 1.4s ease-in-out infinite;
+  height: 72px;
+}
+@keyframes mc-shimmer {
+  from { background-position: 130% 0; }
+  to   { background-position: -30% 0; }
+}
+
+/* ---------- Signature accent on the active nav item ---------- */
+/* Overrides each page's amber border-left with the shared gradient bar.
+   (This file loads after the inline styles, so these win.) */
+.sidebar .nav-tab { position: relative; }
+.sidebar .nav-tab.active { border-left-color: transparent; }
+.sidebar .nav-tab.active::before {
+  content: "";
+  position: absolute; left: 0; top: 18%; bottom: 18%; width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-grad);
 }
 
 /* ---------- Dismissible LAN banner ---------- */
@@ -87,9 +160,11 @@ body.lan-dismissed .lan-warning { display: none; }
   }
   .nav-tab.active {
     border-left: none;
-    border-bottom-color: var(--cyan);
     background: transparent;
+    border-image: var(--accent-grad) 1;
+    border-bottom: 2px solid;
   }
+  .sidebar .nav-tab.active::before { display: none; }
   /* Clock / version / token / page-nav don't fit in the strip */
   .sidebar-footer, .sidebar .page-nav { display: none; }
   .main-content { margin-left: 0; padding: 10px; max-width: 100%; }

@@ -115,11 +115,12 @@
   }
   .lan-warning strong { color: var(--amber); }
 
-  /* ---------- Section / panel ---------- */
+  /* ---------- Section / panel (MC-UI-CONSOLE-1: depth over borders) ---------- */
   section {
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    border: none;
+    border-radius: var(--radius, 12px);
     background: var(--panel);
+    box-shadow: var(--shadow-1), var(--edge);
     margin-bottom: 12px;
     overflow: hidden;
   }
@@ -215,7 +216,9 @@
   .kanban-col {
     flex: 0 0 270px; min-width: 270px; max-height: 70vh;
     display: flex; flex-direction: column;
-    background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+    background: var(--panel-2); border: none;
+    border-radius: var(--radius-sm, 10px);
+    box-shadow: var(--shadow-1), var(--edge);
     overflow: hidden;
   }
   .kanban-col.dragover { border-color: var(--cyan); box-shadow: inset 0 0 0 2px var(--cyan); }
@@ -272,13 +275,14 @@
 
   /* Cards */
   .kanban-card {
-    background: var(--bg); border: 1px solid var(--line);
+    background: var(--bg); border: 1px solid transparent;
     border-left: 3px solid var(--text3);
-    border-radius: 4px; padding: 7px 9px; margin-bottom: 6px;
+    border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;
     font-size: 12px; cursor: grab;
-    transition: border-color 0.15s, background 0.15s;
+    box-shadow: var(--edge);
+    transition: border-color 0.15s, background 0.15s, transform 0.12s;
   }
-  .kanban-card:hover { border-color: var(--cyan); }
+  .kanban-card:hover { border-color: var(--cyan); transform: translateY(-1px); }
   .kanban-card.dragging { opacity: 0.4; }
   .kanban-card.status-triage  { border-left-color: #bc8cff; }
   .kanban-card.status-todo    { border-left-color: var(--text3); }
@@ -829,7 +833,7 @@
     <a href="/kanban" class="nav-tab active">🗂 Kanban</a>
     <a href="/memory-graph" class="nav-tab">🧠 Memory Graph</a>
   </nav>
-  <div class="sidebar-footer">v1.18.0</div>
+  <div class="sidebar-footer">v1.19.0</div>
 </aside>
 
 <main class="main-content">
@@ -845,7 +849,7 @@
 
   <!-- ========== Kanban (extracted from mission-control.html Section 10) ========== -->
   <section id="section-kanban">
-    <h2><span class="num">10.</span> Kanban <span style="color:var(--text2);font-weight:400">— Multi-Agent Board</span>
+    <h2>Kanban <span style="color:var(--text2);font-weight:400">— Multi-Agent Board</span>
       <span class="hint" id="kanban-hint">loading…</span></h2>
     <div class="body">
       <!-- Summary chips: total + per-status + per-assignee -->
@@ -943,6 +947,18 @@ async function authFetch(url, opts) {
   return fetch(url, opts);
 }
 
+// MC-UI-CONSOLE-1 (2026-07-10): toast notifications instead of alert() —
+// non-blocking, auto-dismissing. Styles live in /static/common.css.
+function toast(msg, kind = "info") {
+  let c = document.getElementById("mc-toasts");
+  if (!c) { c = document.createElement("div"); c.id = "mc-toasts"; document.body.appendChild(c); }
+  const t = document.createElement("div");
+  t.className = `mc-toast ${kind}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4500);
+}
+
 // MC-KANBAN-BUGFIX-2 (2026-06-16): smart-diff polling.
 // Tracks every card DOM node we've rendered, keyed by task_id. The polling
 // tick now only adds/moves/removes cards whose data has changed; cards that
@@ -1034,7 +1050,10 @@ function smartRenderKanban(d, forceRebuild) {
         return tb - ta;
       });
     }
-    const hidden = (!_kanbanShowAllDone && tasks.length > KANBAN_DONE_RENDER_CAP)
+    // MC-UI-CONSOLE-1: an active search bypasses the render cap — the user
+    // is looking for something specific, so EVERY done card must be
+    // searchable, not just the 15 most recent.
+    const hidden = (!_kanbanShowAllDone && !search && tasks.length > KANBAN_DONE_RENDER_CAP)
       ? tasks.length - KANBAN_DONE_RENDER_CAP : 0;
     if (hidden > 0) tasks = tasks.slice(0, KANBAN_DONE_RENDER_CAP);
     return { ...c, tasks, _doneHidden: hidden };
@@ -1263,6 +1282,20 @@ function smartRenderKanban(d, forceRebuild) {
       });
     }
     _kanbanRenderedIds.add(tid);
+  }
+
+  // ---- MC-UI-CONSOLE-1: apply the search filter ----
+  // The search box computed `search` but the smart-diff path never used it
+  // (only the retired string-renderer did) — so searching filtered nothing.
+  // Fix: a visibility pass over the tracked cards after every render.
+  for (const [tid, entry] of _kanbanCardNodes.entries()) {
+    const rec = newCardData.get(tid);
+    const t = rec ? rec.task : null;
+    const match = !search || !t
+      ? true
+      : ((t.title || "").toLowerCase().includes(search)
+         || (t.task_id || "").toLowerCase().includes(search));
+    entry.cardEl.style.display = (search && !match) ? "none" : "";
   }
 
   // ---- Section hint ----
@@ -1578,7 +1611,7 @@ async function moveCardTo(taskId, newStatus) {
   } catch (e) {
     // On failure, force a refresh so the card snaps back to its real status
     await loadKanban();
-    alert(`Move failed: ${e.message}`);
+    toast(`Move failed: ${e.message}`, "error");
   }
 }
 
@@ -1608,7 +1641,7 @@ async function assignTask(taskId, agent) {
   } catch (e) {
     // On failure, force a refresh so the card snaps back to its real state
     await loadKanban();
-    alert(`Assign failed: ${e.message}`);
+    toast(`Assign failed: ${e.message}`, "error");
   }
 }
 
@@ -1668,7 +1701,7 @@ async function submitCreateTask(form, colId) {
   const assignee = (fd.get("assignee") || "").toString().trim();
   const priority = (fd.get("priority") || "normal").toString().trim();
   if (!title || !assignee) {
-    alert("title + assignee are required");
+    toast("Title + assignee are required", "error");
     return;
   }
   // Inline create always lands in the triage column, regardless of which
@@ -1686,7 +1719,7 @@ async function submitCreateTask(form, colId) {
     _kanbanCreateFormOpen = false;  // MC-KANBAN-BUGFIX-1: form submitted, resume polling
     await loadKanban();
   } catch (e) {
-    alert(`Create failed: ${e.message}`);
+    toast(`Create failed: ${e.message}`, "error");
   }
 }
 
@@ -1704,6 +1737,12 @@ function stopKanbanPolling() {
 // Wire up toolbar once the DOM is ready (script runs at end of body so OK)
 (function wireKanbanToolbar() {
   const search = document.getElementById("kanban-search");
+  // MC-UI-CONSOLE-1: /kanban?search=<task-id> pre-fills the search box —
+  // the agent cards on the main page deep-link their current task here.
+  try {
+    const q = new URLSearchParams(location.search).get("search");
+    if (q && search) { search.value = q; _kanbanSearch = q; }
+  } catch (e) {}
   if (search) search.addEventListener("input", (e) => {
     _kanbanSearch = e.target.value || "";
     if (_kanbanState) renderKanban(_kanbanState);
@@ -1780,7 +1819,7 @@ async function openResultModal(taskId) {
     backdrop.hidden = false;
   } catch (err) {
     console.error("Failed to load result:", err);
-    alert("Failed to load result: " + err.message);
+    toast("Failed to load result: " + err.message, "error");
   }
 }
 
