@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-test_auth.py — Unit tests for MC_ADMIN_TOKEN enforcement.
+test_auth.py — auth was retired per NOFI directive (2026-07-10).
 
-We exercise `security.is_authorized` directly with a stub request object,
-plus an integration test that hits the running server via urllib when
-available. The unit tests are hermetic; the integration tests are
-skipped if no server is reachable on the configured port.
+Mission Control is a personal single-user page on a trusted home LAN, so
+`security.is_authorized` now always returns True and every write endpoint
+is open. These tests pin that behavior: no token, a wrong token, and a LAN
+client must ALL be authorized. If auth is ever reinstated, rewrite these
+tests alongside it (the old token-enforcement suite is in git history).
 """
 import json
 import os
@@ -22,7 +23,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "code"))
 
-from security import is_authorized, auth_required_error, reset_admin_token_cache  # noqa: E402
+from security import is_authorized  # noqa: E402
 
 
 class _StubRequest:
@@ -33,110 +34,39 @@ class _StubRequest:
         self.headers = headers or {}
 
 
-class IsAuthorizedUnitTests(unittest.TestCase):
-    def setUp(self):
-        # security._resolve_admin_token() caches its result across calls.
-        # Tests that swap os.environ need to invalidate the cache so the
-        # next call actually re-reads from the (mocked) env, not the
-        # prior real value.
-        reset_admin_token_cache()
-        # Patch the resolver so it does NOT fall back to start-mc.sh during
-        # tests — the test's mocked os.environ should be the only source of
-        # truth, otherwise the real token from start-mc.sh leaks in.
-        self._resolver_patcher = mock.patch(
-            "security._resolve_admin_token",
-            side_effect=lambda: os.environ.get("MC_ADMIN_TOKEN", "").strip(),
-        )
-        self._resolver_patcher.start()
+class AlwaysAuthorizedTests(unittest.TestCase):
+    def test_loopback_allowed(self):
+        for ip in ("127.0.0.1", "::1", "localhost"):
+            self.assertTrue(is_authorized(_StubRequest(ip=ip)))
 
-    def tearDown(self):
-        self._resolver_patcher.stop()
-        reset_admin_token_cache()
+    def test_lan_allowed_without_token(self):
+        self.assertTrue(is_authorized(_StubRequest(ip="192.168.0.29")))
 
-    def test_loopback_allowed_when_token_unset(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("MC_ADMIN_TOKEN", None)
-            reset_admin_token_cache()
-            for ip in ("127.0.0.1", "::1", "localhost"):
-                self.assertTrue(is_authorized(_StubRequest(ip=ip)),
-                                f"loopback {ip} should be allowed")
+    def test_allowed_even_with_wrong_token_header(self):
+        # A stale token stored by an old browser session must not lock
+        # anyone out now that auth is retired.
+        self.assertTrue(is_authorized(_StubRequest(
+            ip="192.168.0.29",
+            headers={"Authorization": "Bearer obviously-wrong-token"},
+        )))
+        self.assertTrue(is_authorized(_StubRequest(
+            ip="192.168.0.29",
+            headers={"X-MC-Admin-Token": "stale-token"},
+        )))
 
-    def test_lan_denied_when_token_unset(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("MC_ADMIN_TOKEN", None)
-            reset_admin_token_cache()
-            self.assertFalse(is_authorized(_StubRequest(ip="192.168.0.29")))
-
-    def test_token_required_when_set(self):
+    def test_allowed_when_env_token_set(self):
+        # Even if MC_ADMIN_TOKEN is still exported somewhere, it is ignored.
         with mock.patch.dict(os.environ, {"MC_ADMIN_TOKEN": "secret-xyz"}):
-            reset_admin_token_cache()
-            # No header → denied
-            self.assertFalse(is_authorized(_StubRequest(ip="127.0.0.1")))
-            # Wrong bearer → denied
-            self.assertFalse(is_authorized(_StubRequest(
-                ip="127.0.0.1",
-                headers={"Authorization": "Bearer wrong-token"},
-            )))
-            # Correct bearer → allowed
-            self.assertTrue(is_authorized(_StubRequest(
-                ip="127.0.0.1",
-                headers={"Authorization": "Bearer secret-xyz"},
-            )))
-            # X-MC-Admin-Token header → allowed
-            self.assertTrue(is_authorized(_StubRequest(
-                ip="127.0.0.1",
-                headers={"X-MC-Admin-Token": "secret-xyz"},
-            )))
-            # LAN IP with token → allowed (token overrides loopback rule)
-            self.assertTrue(is_authorized(_StubRequest(
-                ip="192.168.0.29",
-                headers={"Authorization": "Bearer secret-xyz"},
-            )))
-
-    def test_token_whitespace_only_treated_as_unset(self):
-        with mock.patch.dict(os.environ, {"MC_ADMIN_TOKEN": "   "}):
-            reset_admin_token_cache()
-            # Token after strip is empty → loopback-only mode.
-            self.assertTrue(is_authorized(_StubRequest(ip="127.0.0.1")))
-            self.assertFalse(is_authorized(_StubRequest(ip="192.168.0.29")))
-
-
-class AuthRequiredErrorTests(unittest.TestCase):
-    def setUp(self):
-        reset_admin_token_cache()
-        self._resolver_patcher = mock.patch(
-            "security._resolve_admin_token",
-            side_effect=lambda: os.environ.get("MC_ADMIN_TOKEN", "").strip(),
-        )
-        self._resolver_patcher.start()
-
-    def tearDown(self):
-        self._resolver_patcher.stop()
-        reset_admin_token_cache()
-
-    def test_unset_token_message_mentions_setup(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("MC_ADMIN_TOKEN", None)
-            reset_admin_token_cache()
-            err = auth_required_error()
-            self.assertIn("MC_ADMIN_TOKEN", err["error"])
-            self.assertTrue(err.get("setup_required"))
-
-    def test_set_token_message_mentions_header(self):
-        with mock.patch.dict(os.environ, {"MC_ADMIN_TOKEN": "secret"}):
-            reset_admin_token_cache()
-            err = auth_required_error()
-            self.assertIn("unauthorized", err["error"])
-            self.assertIn("Bearer", err["how"])
+            self.assertTrue(is_authorized(_StubRequest(ip="192.168.0.29")))
 
 
 class ServerIntegrationTests(unittest.TestCase):
-    """If a Mission Control server is reachable on port 8767, exercise auth."""
+    """If a Mission Control server is reachable on port 8767, verify writes
+    are accepted without any token."""
 
     @classmethod
     def setUpClass(cls):
         cls.port = int(os.environ.get("MC_TEST_PORT", "8767"))
-        cls.host = os.environ.get("MC_TEST_HOST", "127.0.0.1")
         cls.reachable = cls._probe()
 
     @staticmethod
@@ -171,13 +101,9 @@ class ServerIntegrationTests(unittest.TestCase):
         except Exception as e:
             self.skipTest(f"server not reachable: {e}")
 
-    def test_unauthorized_write_returns_403(self):
+    def test_write_accepted_without_token(self):
         if not self.reachable:
             self.skipTest("server not reachable")
-        # Save and clear MC_ADMIN_TOKEN at request time; the test process
-        # env doesn't affect the already-running server. We just verify
-        # that without a token, the LAN-write rejection path works.
-        # Send with a known-bad token to force the 403 path.
         status, body = self._post(
             "/api/memory-graph/events",
             {"type": "node.upsert",
@@ -185,7 +111,7 @@ class ServerIntegrationTests(unittest.TestCase):
                       "label": "x"}},
             headers={"Authorization": "Bearer obviously-wrong-token"},
         )
-        self.assertEqual(status, 403, body)
+        self.assertEqual(status, 200, body)
 
 
 if __name__ == "__main__":

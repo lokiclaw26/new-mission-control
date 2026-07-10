@@ -22,7 +22,6 @@ assignee, assigned_to, kanban_status) are NEVER touched by the regex
 patterns unless their value happens to look like a secret on its own.
 """
 
-import hmac
 import json
 import os
 import re
@@ -83,35 +82,16 @@ def reset_admin_token_cache() -> None:
 
 
 def is_authorized(request) -> bool:
-    """Return True iff the request is authorized to perform writes.
+    """Always True — auth retired per NOFI directive (2026-07-10).
 
-    Rules (per MC-MEMORY-GRAPH-3A-BACKEND spec):
-      - If MC_ADMIN_TOKEN is configured (env or start-mc.sh): require a
-        matching Authorization: Bearer *** OR X-MC-Admin-Token: <token>
-        header.
-      - If MC_ADMIN_TOKEN is unset: allow only loopback clients.
-      - {confirm: true} body does NOT count as auth.
+    Mission Control is a personal single-user page on a trusted home LAN;
+    the MC_ADMIN_TOKEN gate added friction with no real benefit there, so
+    every write endpoint is now open. The gate call-sites in serve.py are
+    left in place: if the page is ever exposed beyond the home network,
+    restore the token check here (git history has the full implementation)
+    and everything re-locks without touching the endpoints.
     """
-    token = _resolve_admin_token()
-    if not token:
-        # No token configured. Allow loopback only.
-        try:
-            client_addr = request.client_address[0]
-        except Exception:
-            client_addr = ""
-        if client_addr in _LOOPBACK_IPS:
-            return True
-        return False
-
-    # Token configured. Require it in either header.
-    auth_header = (request.headers.get("Authorization") or "").strip()
-    if auth_header.lower().startswith("bearer "):
-        provided = auth_header[7:].strip()
-    else:
-        provided = (request.headers.get("X-MC-Admin-Token") or "").strip()
-    # Constant-time comparison — a plain == leaks the match length through
-    # response timing, which is enough to brute-force a token on a LAN.
-    return hmac.compare_digest(provided.encode("utf-8"), token.encode("utf-8"))
+    return True
 
 
 def auth_required_error() -> dict:

@@ -501,6 +501,11 @@
   .filter-btn:hover { color: var(--text); border-color: var(--text3); }
   .filter-btn.active { color: var(--cyan); border-color: var(--cyan); }
 
+  /* MC-TASKS-PAGER-1: prev/next pager under the Tasks table */
+  .tasks-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; font-size: 12px; }
+  .tasks-pager .filter-btn { padding: 4px 12px; }
+  .tasks-pager .filter-btn:disabled { opacity: 0.35; cursor: default; }
+
   .ts-iso { color: var(--text3); font-size: 10px; margin-left: 4px; opacity: 0.7; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; word-break: break-word; }
@@ -644,8 +649,7 @@
       <div class="clock-date" id="clock-date">— —</div>
       <div class="clock-tz">Dubai · UTC+4</div>
     </div>
-    v1.17.0+memory<br>
-    <button class="token-btn" id="token-btn" style="margin-top:6px;width:100%;font-size:11px;padding:4px;background:transparent;color:var(--text2);border:1px solid var(--line);border-radius:3px;cursor:pointer;" title="Set MC_ADMIN_TOKEN (required for write actions)">🔑 Token</button>
+    v1.18.0
   </div>
 </aside>
 <main class="main-content">
@@ -755,7 +759,6 @@
   <span id="foot-version">v— · live</span>
   <span id="foot-lan">LAN: detecting…</span>
   <span id="foot-uptime">up —</span>
-  <span id="foot-key">API key: not loaded</span>
   <span class="spacer" style="flex:1"></span>
   <span>local only · manual refresh · 3 agents</span>
 </footer>
@@ -766,39 +769,15 @@ const esc = (s) => String(s ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<"
 const dashOr = (v, reason) => v === null || v === undefined || v === "" ? `<span class="muted" title="${esc(reason || 'no source')}">—</span>` : esc(v);
 const badge = (label, cls) => `<span class="badge ${cls || 'gray'}">${esc(label)}</span>`;
 
-// MC-MEMORY-GRAPH-3A (2026-06-17): LAN writes (e.g. POST /api/data/order) need
-// MC_ADMIN_TOKEN. The browser can't read the server env, so the user pastes the
-// token here and we persist it in localStorage. All write fetches go through
-// authFetch() which auto-includes X-MC-Admin-Token. On 401/403 it offers a
-// re-paste prompt. This matches the kanban/memory-graph pages.
-const MC_TOKEN_KEY = "mc_admin_token";
-function getStoredToken() {
-  try { return localStorage.getItem(MC_TOKEN_KEY) || ""; } catch (e) { return ""; }
-}
-function setStoredToken(v) {
-  try { if (v) localStorage.setItem(MC_TOKEN_KEY, v); else localStorage.removeItem(MC_TOKEN_KEY); } catch (e) {}
-}
-function promptForToken() {
-  const cur = getStoredToken();
-  const v = prompt("Paste MC_ADMIN_TOKEN (the value from start-mc.sh):", cur || "");
-  if (v === null) return;
-  setStoredToken(v.trim());
-  if (v.trim()) alert("Token saved. Write actions will now include X-MC-Admin-Token.");
-  else alert("Token cleared. Write actions will fail until you set one.");
-}
+// MC-NO-AUTH-1 (2026-07-10): the MC_ADMIN_TOKEN gate is retired — this is a
+// personal single-user page on a trusted home LAN. authFetch is now a plain
+// JSON fetch; the name is kept so the write call-sites don't change.
 async function authFetch(url, opts) {
   opts = opts || {};
   opts.cache = "no-store";
   opts.headers = Object.assign({}, opts.headers || {});
   opts.headers["Content-Type"] = opts.headers["Content-Type"] || "application/json";
-  const t = getStoredToken();
-  if (t) opts.headers["X-MC-Admin-Token"] = t;
-  const r = await fetch(url, opts);
-  if (r.status === 401 || r.status === 403) {
-    if (t) { if (confirm(`Server rejected the stored token (HTTP ${r.status}). Re-paste?`)) promptForToken(); }
-    else { promptForToken(); }
-  }
-  return r;
+  return fetch(url, opts);
 }
 
 async function fetchJSON(url) {
@@ -810,9 +789,19 @@ async function fetchJSON(url) {
 // --- Stage 12: task filter state — Real only is the default ---
 let _tasksFilter = 'real';
 let _tasksCounts = { all: 0, demo: 0, real: 0 };
+// MC-TASKS-PAGER-1 (2026-07-10): the Tasks table paginates — 10 most recent
+// per page with prev/next arrows, instead of one endless table.
+const TASKS_PAGE_SIZE = 10;
+let _tasksPage = 0;
+let _tasksLastData = null;
+function tasksPageMove(delta) {
+  _tasksPage += delta;
+  if (_tasksLastData) renderTasks(_tasksLastData);
+}
 async function setTasksFilter(f) {
   if (!['all','demo','real'].includes(f)) f = 'real';
   _tasksFilter = f;
+  _tasksPage = 0;
   let url;
   if (f === 'real') url = '/api/data/tasks';
   else if (f === 'all') url = '/api/data/tasks?include=demo';
@@ -1001,27 +990,9 @@ function renderActionRequired(overview, tasks, provider, logs, projects) {
   const issues = [];   // {level: 'warn'|'fail', icon, text}
   const notices = [];  // informational only
 
-  // 1. Provider proxy not connected
-  if (provider?.providers && Array.isArray(provider.providers)) {
-    for (const p of provider.providers) {
-      const cs = (p.connection_status || "").toLowerCase();
-      if (cs.includes("not connected") || cs.includes("down") || cs.includes("unreachable")) {
-        issues.push({ level: "warn", icon: "🔌",
-          text: `Provider proxy not connected: <strong>${esc(p.provider || p.slot || "unknown")}</strong> — ${esc(p.connection_detail || cs)}` });
-      }
-      // 2. Provider key missing
-      if (p.key_configured === false || cs.includes("not configured") || (p.connection_detail || "").toLowerCase().includes("no key")) {
-        const slot = p.slot || "?";
-        if (slot === "paid") {
-          issues.push({ level: "fail", icon: "🔑",
-            text: `Provider key missing: <strong>${esc(p.provider || "paid")}</strong> — .env not configured or key absent` });
-        } else {
-          notices.push({ level: "warn", icon: "🔑",
-            text: `Provider config incomplete: <strong>${esc(p.provider || p.slot || "unknown")}</strong> — ${esc(p.connection_detail || cs)}` });
-        }
-      }
-    }
-  }
+  // MC-NO-LLM-CHECKS-1 (2026-07-10): provider-proxy / LLM-key checks removed
+  // per NOFI directive — the agents manage their own LLM config; the
+  // dashboard no longer nags about missing keys.
 
   // 3. No real tasks yet
   const realCount = tasks?.count ?? (tasks?.tasks ? tasks.tasks.length : 0);
@@ -1074,6 +1045,7 @@ function renderActionRequired(overview, tasks, provider, logs, projects) {
 // 3. Tasks — table or empty-state card
 // ============================================================
 function renderTasks(d) {
+  _tasksLastData = d;  // MC-TASKS-PAGER-1: pager arrows re-render from this
   const filterBar = `<div class="filter-bar">
     <span class="muted">View:</span>
     <button id="tasks-filter-real" class="filter-btn ${_tasksFilter==='real'?'active':''}" onclick="setTasksFilter('real')">Real only (…)</button>
@@ -1103,7 +1075,20 @@ function renderTasks(d) {
     return;
   }
 
-  const rows = d.tasks.map(t => {
+  // MC-TASKS-PAGER-1: most recent first, 10 per page.
+  const sorted = d.tasks.slice().sort((a, b) => {
+    const ta = Date.parse(a.updated || a.updated_at || "") || 0;
+    const tb = Date.parse(b.updated || b.updated_at || "") || 0;
+    return tb - ta;
+  });
+  const totalTasks = sorted.length;
+  const maxPage = Math.max(0, Math.ceil(totalTasks / TASKS_PAGE_SIZE) - 1);
+  if (_tasksPage > maxPage) _tasksPage = maxPage;
+  if (_tasksPage < 0) _tasksPage = 0;
+  const pageStart = _tasksPage * TASKS_PAGE_SIZE;
+  const pageTasks = sorted.slice(pageStart, pageStart + TASKS_PAGE_SIZE);
+
+  const rows = pageTasks.map(t => {
     const stCls = t.status === "done" ? "green" : t.status === "failed" || t.status === "blocked" ? "red" : t.status === "in-progress" ? "amber" : "gray";
     const prCls = t.priority === "P0" ? "red" : t.priority === "P1" ? "amber" : "gray";
     const blockedHtml = (t.status === "blocked" && t.blockers)
@@ -1126,9 +1111,17 @@ function renderTasks(d) {
     ? `<div class="demo-banner">⚠ ${demoCount} task(s) shown are <strong>local/demo</strong> data — see frontmatter <code>data_source: local-demo</code>. Replace with real task files when the agent system produces them.</div>`
     : "";
 
+  // MC-TASKS-PAGER-1: prev/next pager under the table.
+  const pagerHtml = totalTasks > TASKS_PAGE_SIZE ? `
+    <div class="tasks-pager">
+      <button class="filter-btn" onclick="tasksPageMove(-1)" ${_tasksPage === 0 ? "disabled" : ""}>← previous 10</button>
+      <span class="muted">${pageStart + 1}–${Math.min(pageStart + TASKS_PAGE_SIZE, totalTasks)} of ${totalTasks} · most recent first</span>
+      <button class="filter-btn" onclick="tasksPageMove(1)" ${_tasksPage >= maxPage ? "disabled" : ""}>next 10 →</button>
+    </div>` : "";
+
   $("#tasks").innerHTML = filterBar + demoBanner + `<table>
     <thead><tr><th class="id">ID</th><th>Title</th><th>Agent</th><th>Status</th><th>Priority</th><th>Blocked reason</th><th>Updated</th><th>Evidence</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+    <tbody>${rows}</tbody></table>` + pagerHtml;
 
   const h = document.getElementById('tasks-hint');
   if (h) h.textContent = `${d.tasks.length} ${_tasksFilter}${demoCount > 0 ? ` (${demoCount} demo)` : ''}`;
@@ -1184,21 +1177,6 @@ function renderProjects(d) {
 function renderLogs(d) {
   const appCls = d.app_health === "ok" ? "green" : d.app_health === "degraded" ? "amber" : "gray";
   const apiCls = d.api_health === "ok" ? "green" : d.api_health === "degraded" ? "amber" : "gray";
-  const env = d.env || {};
-  const envKeys = Object.keys(env).filter(k => k !== "__env_file_present__");
-  const envHtml = envKeys.length === 0
-    ? `<span class="muted">no env vars tracked</span>`
-    : envKeys.map(k => {
-        const status = env[k];
-        // MC-UI-POLISH-1: "missing" is a not-configured state, not a failure —
-        // amber, so red stays reserved for things that are actually broken.
-        const cls = status === "configured" ? "green" : "amber";
-        return `<div style="display:flex;gap:8px;align-items:center;margin:3px 0">
-          <span class="ts" style="min-width:240px">${esc(k)}</span>
-          ${badge(status, cls)}
-        </div>`;
-      }).join("");
-
   const summary = `
     <div class="health-grid">
       <div class="health-cell">
@@ -1223,15 +1201,11 @@ function renderLogs(d) {
           ? `<span class="ts">${esc(d.last_verification_rel)}</span> <span class="ts-iso">${esc(d.last_verification)}</span><br><span class="muted" style="font-size:10px">${esc(d.last_verification_source || "")}</span>`
           : `<span class="dash" title="no Argus verification log found">—</span>`}
       </div>
-      <div class="health-cell" style="grid-column:1 / -1">
-        <span class="muted">Environment</span>
-        ${envHtml}
-        ${env.__env_file_present__ === false
-          ? `<div class="muted" style="font-size:10px;margin-top:4px">.env file not present at .config/nofitech/.env</div>`
-          : ""}
-      </div>
     </div>
   `;
+  // MC-NO-LLM-CHECKS-1 (2026-07-10): the Environment cell (LLM API key /
+  // model env-var status + ".env not present" note) was removed per NOFI
+  // directive — the agents manage their own LLM config.
 
   // Recent activity (top 5)
   const events = d.events || [];
@@ -1642,10 +1616,6 @@ async function loadAll() {
       const note = v.lan_ip_auto ? "" : " (auto-detect failed)";
       lanEl.textContent = `LAN: http://${ip}:${port}/${note}`;
     }
-    if (results.provider?.providers) {
-      const paid = results.provider.providers.find(p => p.slot === "paid");
-      $("#foot-key").textContent = paid?.key_configured ? "API key: loaded" : "API key: not loaded";
-    }
   } catch {}
 
   // Last refreshed
@@ -1718,17 +1688,7 @@ function updateSidebarStats(overview, logs) {
     `✗ ${num(ft, 'red')} failed · 🩺 <span class="stat-num ${ (logs?.app_health === 'ok') ? 'green' : 'amber' }">${esc(logs?.app_health || '—')}</span>`;
 }
 
-// Wire up the Token button on the main page
-(function wireTokenBtn() {
-  const btn = document.getElementById("token-btn");
-  if (!btn) return;
-  function update() {
-    if (getStoredToken()) { btn.textContent = "🔑 Token ✓"; btn.style.color = "var(--green)"; btn.style.borderColor = "var(--green)"; }
-    else { btn.textContent = "🔑 Token"; btn.style.color = "var(--text2)"; btn.style.borderColor = "var(--line)"; }
-  }
-  btn.addEventListener("click", () => { promptForToken(); update(); });
-  update();
-})();
+// MC-NO-AUTH-1 (2026-07-10): the Token button was removed with the auth gate.
 
 loadAll();
 // MC-LIVE-REFRESH-1 (2026-06-18): auto-refresh every 5s. The footer text

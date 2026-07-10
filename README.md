@@ -27,12 +27,11 @@ Then open `http://<lan-ip>:8767/`.
 
 ## Authentication
 
-Write endpoints (PATCH/POST) are gated by `security.py`:
+**None — by design.** This is a personal single-user dashboard on a trusted home LAN; the old `MC_ADMIN_TOKEN` gate was retired (2026-07-10) and every endpoint is open. Never expose the server to the public internet. If that ever changes, `security.is_authorized()` is still called before every write — restore the token check there (full implementation in git history) and everything re-locks.
 
-- **`MC_ADMIN_TOKEN` set** (env var, or parsed from `start-mc.sh`): requests must carry `Authorization: Bearer <token>` or `X-MC-Admin-Token: <token>`. Comparison is constant-time.
-- **No token configured**: writes are allowed from loopback only; LAN writes are refused with a setup hint.
+The one destructive endpoint, `POST /api/memory-graph/admin-reset`, requires an explicit `{"confirm": true}` body — a safety latch against accidental wipes, not a security gate.
 
-All persisted payloads pass through a field-aware secret redactor (`redact_secrets`) that strips API keys, tokens, JWTs, and passwords while preserving task IDs.
+All persisted payloads still pass through a field-aware secret redactor (`redact_secrets`) that strips API keys, tokens, JWTs, and passwords while preserving task IDs.
 
 ## API surface
 

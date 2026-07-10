@@ -538,38 +538,15 @@
       }, 3500);
     }
 
-    // MC-MEMORY-GRAPH-3A (2026-06-17): LAN writes (e.g. /api/memory-graph/reset)
-    // require MC_ADMIN_TOKEN. The browser cannot read the server's env, so the
-    // user pastes the token here (matching the kanban page's flow). The token
-    // is stored in localStorage. All write fetches go through authFetch().
-    const MG_TOKEN_KEY = "mc_admin_token";
-    function getStoredToken() {
-      try { return localStorage.getItem(MG_TOKEN_KEY) || ""; } catch (e) { return ""; }
-    }
-    function setStoredToken(v) {
-      try { if (v) localStorage.setItem(MG_TOKEN_KEY, v); else localStorage.removeItem(MG_TOKEN_KEY); } catch (e) {}
-    }
-    function promptForToken() {
-      const cur = getStoredToken();
-      const v = prompt("Paste MC_ADMIN_TOKEN (the value from start-mc.sh):", cur || "");
-      if (v === null) return;
-      setStoredToken(v.trim());
-      if (v.trim()) alert("Token saved. Write actions will now include X-MC-Admin-Token.");
-      else alert("Token cleared. Write actions will fail until you set one.");
-    }
+    // MC-NO-AUTH-1 (2026-07-10): the MC_ADMIN_TOKEN gate is retired — this is
+    // a personal single-user page on a trusted home LAN. authFetch is now a
+    // plain JSON fetch; the name is kept so the call-sites don't change.
     async function authFetch(url, opts) {
       opts = opts || {};
       opts.cache = "no-store";
       opts.headers = Object.assign({}, opts.headers || {});
       opts.headers["Content-Type"] = opts.headers["Content-Type"] || "application/json";
-      const t = getStoredToken();
-      if (t) opts.headers["X-MC-Admin-Token"] = t;
-      const r = await fetch(url, opts);
-      if (r.status === 401 || r.status === 403) {
-        if (t) { if (confirm(`Server rejected the stored token (HTTP ${r.status}). Re-paste?`)) promptForToken(); }
-        else { promptForToken(); }
-      }
-      return r;
+      return fetch(url, opts);
     }
 
     function getFilters() {

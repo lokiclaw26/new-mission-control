@@ -222,7 +222,12 @@ def post_admin_reset(handler) -> tuple[int, dict]:
     """POST /api/memory-graph/admin-reset — destructive hard reset.
 
     MC-LIVE-MEMORY-GRAPH-1 (2026-06-19): NOT wired to the UI.
-    Kept for explicit ops / tests. Requires auth.
+    Kept for explicit ops / tests.
+
+    MC-NO-AUTH-1 (2026-07-10): auth is retired (is_authorized is always
+    True), so the token is no longer what stops a stray request from
+    wiping the graph. A destructive wipe now requires an explicit
+    {"confirm": true} body — a safety latch, not a security gate.
     """
     if not is_authorized(handler):
         return 403, auth_required_error()
@@ -232,8 +237,13 @@ def post_admin_reset(handler) -> tuple[int, dict]:
         length = 0
     if length < 0 or length > _MAX_RESET_BODY:
         return 400, {"error": f"body must be 1..{_MAX_RESET_BODY} bytes"}
-    if length > 0:
-        handler.rfile.read(length)
+    raw = handler.rfile.read(length) if length > 0 else b""
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if not isinstance(payload, dict) or payload.get("confirm") is not True:
+        return 400, {"error": 'destructive admin-reset requires a body of {"confirm": true}'}
 
     try:
         global_store = get_global_store()
