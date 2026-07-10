@@ -743,7 +743,13 @@ def _heartbeat_path(agent_id):
 
 
 def write_heartbeat(agent_id):
-    """Write a fresh .heartbeat-<oid> file. Default agent = "thor".
+    """Write a fresh .heartbeat-<oid> file.
+
+    MC-HEARTBEAT-HONEST-1 (2026-07-10): the agent field is now REQUIRED.
+    It used to default to "thor", and the dashboard itself POSTed a thor
+    heartbeat on every 5s poll — so Thor showed LIVE whenever any browser
+    tab had the page open, regardless of the actual agent. Heartbeats must
+    come from the real agent processes only.
 
     Body: {"agent": "<oid>", "ts": "<iso>"}. The "ts" field is the
     server-side wall clock at write time — the frontend does not supply
@@ -752,7 +758,9 @@ def write_heartbeat(agent_id):
     sibling .tmp then os.replace, so a concurrent reader never sees a
     half-written file.
     """
-    agent = (agent_id or "").strip().lower() or "thor"
+    agent = (agent_id or "").strip().lower()
+    if not agent:
+        raise ValueError(f"agent is required; must be one of {AGENTS}")
     if agent not in AGENTS:
         raise ValueError(f"unknown agent: {agent!r}; must be one of {AGENTS}")
     path = _heartbeat_path(agent)
@@ -2677,7 +2685,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._json({"error": "invalid JSON", "detail": str(e)}, 400)
                 if not isinstance(payload, dict):
                     return self._json({"error": "body must be a JSON object"}, 400)
-                agent_id = payload.get("agent") or "thor"
+                # MC-HEARTBEAT-HONEST-1: no default agent — a heartbeat must
+                # name the agent that actually sent it (400 otherwise).
+                agent_id = payload.get("agent") or ""
                 try:
                     result = write_heartbeat(agent_id)
                 except ValueError as e:

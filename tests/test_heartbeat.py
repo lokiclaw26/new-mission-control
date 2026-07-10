@@ -116,6 +116,14 @@ class TestHeartbeatWriters(unittest.TestCase):
         # known list should be referenced
         self.assertTrue(any(a in msg for a in ("thor", "forge", "argus")))
 
+    def test_02b_write_heartbeat_requires_agent(self):
+        # MC-HEARTBEAT-HONEST-1 (2026-07-10): no more default-to-thor.
+        # The old default let the dashboard's viewer poll impersonate Thor,
+        # so Thor showed LIVE whenever any browser tab was open.
+        for empty in (None, "", "   "):
+            with self.assertRaises(ValueError):
+                serve.write_heartbeat(empty)
+
     def test_03_read_heartbeats_returns_all_three_agents_ordered(self):
         serve.write_heartbeat("forge")
         res = serve.read_heartbeats()

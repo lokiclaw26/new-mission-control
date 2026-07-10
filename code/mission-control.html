@@ -1691,16 +1691,12 @@ function updateSidebarStats(overview, logs) {
 // MC-NO-AUTH-1 (2026-07-10): the Token button was removed with the auth gate.
 
 loadAll();
-// MC-LIVE-REFRESH-1 (2026-06-18): auto-refresh every 5s. The footer text
-// used to say "auto-refresh: 30s" but there was no setInterval — the page
-// only refreshed on manual click. Fix: poll /api/data/* every 5s so the
-// agents panel + every other panel updates without page reload. The
-// heartbeat endpoint (POST /api/heartbeat) is pinged once per poll so a
-// viewer keeps the agent's "live" status fresh while looking at the page.
-setInterval(async () => {
-  try { await fetch("/api/heartbeat", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({agent: "thor"}) }); } catch {}
-  loadAll();
-}, 5000);
+// MC-LIVE-REFRESH-1 (2026-06-18): auto-refresh every 5s.
+// MC-HEARTBEAT-HONEST-1 (2026-07-10): the viewer-side POST /api/heartbeat
+// {agent:"thor"} that used to run here is GONE — it made Thor show LIVE
+// whenever any browser tab had the dashboard open. Heartbeats now come
+// only from the real agent processes; the dashboard just reads.
+setInterval(loadAll, 5000);
 
 // MC-CLOCK-1: live Dubai clock. Source of truth for all task timestamps.
 // Renders HH:MM:SS (24h, Dubai) + full date (weekday, day month year).
