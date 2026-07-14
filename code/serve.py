@@ -78,16 +78,17 @@ from datetime import datetime, timezone
 # /api/data/tasks endpoint already scans, so no DB is introduced.
 import kanban_parser  # noqa: E402  (intentional local import — keeps top of file clean)
 
-PORT = 8767
+PORT = 8768
 HOST = "0.0.0.0"  # v1.3.0 — full LAN access (reversed Stage-1 'local only' lock per NOFI directive)
 HERE = Path(__file__).parent.resolve()
 PROJECT_ROOT = HERE.parent              # 01_projects/mission-control
 COMPANY_ROOT = PROJECT_ROOT.parent.parent  # ~/NofiTech-Ind
+DASHBOARD_PROJECT_NAME = PROJECT_ROOT.name  # 'mission-control-v2'
 START_TIME = time.time()
 
 # v1.10.0 — live version: read from git at request time (no restart needed).
 # Fallback to manual values if git is unavailable or this is a fresh checkout.
-FALLBACK_VERSION = "1.16.0"  # MC-RESULT-IMAGES-1: /api/file endpoint + result assets
+FALLBACK_VERSION = "1.19.0"  # MC-V1.19.0: result body polish + DASHBOARD_PROJECT_NAME skip-self-ref + PORT=8768
 FALLBACK_COMMIT = "live"
 
 def _git(*args):
@@ -369,8 +370,31 @@ def data_overview():
                         most_recent = (mt, tf)
             if most_recent:
                 # The project is the directory two levels up from the task file
-                # (e.g. .../01_projects/<project>/tasks/<task>.md)
-                project_dir = most_recent[1].parent.parent
+                # (e.g. .../01_projects/<project>/tasks/<task>.md).
+                # MC-FIX-CURRENT-PROJECT-SELF (2026-07-15): skip the dashboard's
+                # own dir so the "current project" card always reflects a real
+                # project, not "mission-control-v2" pointing at itself.
+                task_file = most_recent[1]
+                project_dir = task_file.parent.parent
+                if project_dir.name in (DASHBOARD_PROJECT_NAME,):
+                    # Look for the next-recent task file outside the dashboard dir
+                    candidates = []
+                    for root in (COMPANY_ROOT / "01_projects", COMPANY_ROOT / "00_company_os"):
+                        if not root.is_dir():
+                            continue
+                        for tf in root.glob("*/tasks/*.md"):
+                            if tf.parent.parent.name == DASHBOARD_PROJECT_NAME:
+                                continue
+                            try:
+                                mt = tf.stat().st_mtime
+                            except Exception:
+                                continue
+                            if (now_dt.timestamp() - mt) > 86400:
+                                continue
+                            candidates.append((mt, tf))
+                    if candidates:
+                        candidates.sort(key=lambda x: x[0], reverse=True)
+                        project_dir = candidates[0][1].parent.parent
                 current_project_value = project_dir.name
             else:
                 current_project_reason = "no kanban activity in last 24h and no recent task files"

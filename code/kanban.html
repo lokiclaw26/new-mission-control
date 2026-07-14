@@ -595,12 +595,12 @@
     border: 1px solid var(--amber);
     border-radius: 6px;
     width: 90%;
-    max-width: 720px;
+    max-width: 760px;
     max-height: 85vh;
     display: flex;
     flex-direction: column;
     color: var(--text);
-    font-family: var(--font-mono, monospace);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   .result-modal-header {
     display: flex;
@@ -632,16 +632,30 @@
     border-bottom: 1px solid var(--line);
   }
   .result-modal-body {
-    padding: 16px;
+    padding: 20px 24px;
     overflow-y: auto;
     flex: 1;
-    font-size: 13px;
-    line-height: 1.5;
+    font-size: 14px;
+    line-height: 1.65;
   }
+  .result-modal-body p {
+    margin: 0 0 14px 0;
+    max-width: 70ch;
+    color: var(--text);
+  }
+  .result-modal-body p:last-child { margin-bottom: 0; }
   .result-modal-body h1, .result-modal-body h2, .result-modal-body h3 {
     color: var(--amber);
-    margin-top: 12px;
+    margin: 18px 0 8px 0;
+    font-weight: 600;
+    line-height: 1.3;
   }
+  .result-modal-body h1 { font-size: 18px; }
+  .result-modal-body h2 { font-size: 16px; }
+  .result-modal-body h3 { font-size: 14px; }
+  .result-modal-body strong { color: var(--amber); font-weight: 600; }
+  .result-modal-body ul, .result-modal-body ol { margin: 0 0 14px 0; padding-left: 22px; }
+  .result-modal-body li { margin-bottom: 4px; }
   .result-modal-body code {
     background: var(--bg);
     padding: 1px 4px;
@@ -1895,7 +1909,34 @@ function renderMarkdown(md) {
 
   // Paragraphs: split on blank lines, but pass through block elements unchanged
   html = html.split(/\n\n+/).map(block => {
+    // Block elements pass through with no <p> wrapper
     if (block.match(/^<(h\d|ul|ol|pre|table)/)) return block;
+    // Closing tags as standalone blocks (e.g. the </ul><pre> chain from the
+    // regex list/table pipeline) also skip the <p> wrapper
+    if (block.match(/^<\//)) return block;
+    // MC-RESULT-FORMAT-1 (2026-07-10): when a result body is a wall of prose
+    // with no structural markers (no headings/lists/code/tables), split it
+    // into readable paragraphs at sentence boundaries. Threshold: long blocks
+    // (>120 chars) without a period-then-space pattern get grouped into
+    // ~3-4 sentence chunks so the eye can scan.
+    // Marker check: only `##` / `**` / ```` / `^-\s` count as structural
+    // (a plain `-` inside prose like "single-file" must NOT trigger a skip).
+    const hasStructural = /(^##\s)|(\*\*)|(^```)|(^\s*-\s)/m.test(block);
+    if (!hasStructural && block.length > 120) {
+      const sentences = block.replace(/\n/g, " ").split(/(?<=[.!?])\s+(?=[A-Z(])/);
+      const chunks = [];
+      let buf = "";
+      for (const s of sentences) {
+        if ((buf + " " + s).trim().length > 320 && buf) {
+          chunks.push(buf.trim());
+          buf = s;
+        } else {
+          buf = (buf ? buf + " " : "") + s;
+        }
+      }
+      if (buf.trim()) chunks.push(buf.trim());
+      return chunks.map(c => "<p>" + c + "</p>").join("\n");
+    }
     return "<p>" + block.replace(/\n/g, "<br>") + "</p>";
   }).join("\n");
 

@@ -9,11 +9,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PORT=8767
+PORT=8768
 LOG_DIR="$SCRIPT_DIR/logs"
-LOG_FILE="$LOG_DIR/mission-control.log"
-PID_FILE="$LOG_DIR/mission-control.pid"
-URL="http://192.168.0.29:$PORT/"
+LOG_FILE="$LOG_DIR/mission-control-v2.log"
+PID_FILE="$LOG_DIR/mission-control-v2.pid"
+URL="http://192.168.0.50:$PORT/"
 
 mkdir -p "$LOG_DIR"
 
