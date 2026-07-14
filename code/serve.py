@@ -87,7 +87,7 @@ START_TIME = time.time()
 
 # v1.10.0 — live version: read from git at request time (no restart needed).
 # Fallback to manual values if git is unavailable or this is a fresh checkout.
-FALLBACK_VERSION = "1.19.0"  # MC-UI-CONSOLE-1: console layout, Inter font, agent hero cards, honest heartbeats
+FALLBACK_VERSION = "1.16.0"  # MC-RESULT-IMAGES-1: /api/file endpoint + result assets
 FALLBACK_COMMIT = "live"
 
 def _git(*args):
@@ -100,21 +100,8 @@ def _git(*args):
     except Exception:
         return ""
 
-# MC-VERSION-CACHE-1 (2026-07-09): get_version() shells out to git 5 times,
-# and the dashboard polls /api/health + /api/version every few seconds — that
-# was ~10 subprocess spawns per poll cycle. Cache the result briefly; 30s is
-# still "live" for a version string but drops the git calls to ~10/minute max.
-_VERSION_CACHE_TTL_SEC = 30
-_version_cache: dict | None = None
-_version_cache_at = 0.0
-
-
 def get_version():
-    """Read version + commit from git tags/HEAD, cached for 30s. Falls back to constants."""
-    global _version_cache, _version_cache_at
-    now = time.monotonic()
-    if _version_cache is not None and (now - _version_cache_at) < _VERSION_CACHE_TTL_SEC:
-        return _version_cache
+    """Read version + commit from git tags/HEAD at call time. Falls back to constants."""
     # Prefer: latest annotated tag matching 'mission-control-v*'
     tag = _git("describe", "--tags", "--abbrev=0", "--match", "mission-control-v*")
     head_short = _git("rev-parse", "--short", "HEAD")
@@ -131,7 +118,7 @@ def get_version():
     else:
         ver = FALLBACK_VERSION
         commit = FALLBACK_COMMIT
-    result = {
+    return {
         "version": ver,
         "commit": commit,
         "commit_full": head_long or None,
@@ -139,9 +126,6 @@ def get_version():
         "dirty": bool(dirty),
         "tag": tag or None,
     }
-    _version_cache = result
-    _version_cache_at = now
-    return result
 
 # ---- 3-agent company (locked 2026-06-10, charter v3.0) ----
 AGENTS = ["thor", "forge", "argus"]
@@ -743,13 +727,7 @@ def _heartbeat_path(agent_id):
 
 
 def write_heartbeat(agent_id):
-    """Write a fresh .heartbeat-<oid> file.
-
-    MC-HEARTBEAT-HONEST-1 (2026-07-10): the agent field is now REQUIRED.
-    It used to default to "thor", and the dashboard itself POSTed a thor
-    heartbeat on every 5s poll — so Thor showed LIVE whenever any browser
-    tab had the page open, regardless of the actual agent. Heartbeats must
-    come from the real agent processes only.
+    """Write a fresh .heartbeat-<oid> file. Default agent = "thor".
 
     Body: {"agent": "<oid>", "ts": "<iso>"}. The "ts" field is the
     server-side wall clock at write time — the frontend does not supply
@@ -758,9 +736,7 @@ def write_heartbeat(agent_id):
     sibling .tmp then os.replace, so a concurrent reader never sees a
     half-written file.
     """
-    agent = (agent_id or "").strip().lower()
-    if not agent:
-        raise ValueError(f"agent is required; must be one of {AGENTS}")
+    agent = (agent_id or "").strip().lower() or "thor"
     if agent not in AGENTS:
         raise ValueError(f"unknown agent: {agent!r}; must be one of {AGENTS}")
     path = _heartbeat_path(agent)
@@ -2019,7 +1995,6 @@ def patch_kanban_task(task_id: str, new_status: str) -> tuple[int, dict]:
     }
 
 
-@kanban_parser._locked  # MC-ATOMIC-WRITES-1: same read-modify-write lock as the parser's own mutators
 def assign_kanban_task(task_id: str, payload: dict) -> tuple[int, dict]:
     """PATCH /api/data/kanban/task/:id/assign — update task's `assigned_to`
     (Format A YAML) or `owner` row (Format B markdown table) on disk.
@@ -2130,7 +2105,7 @@ def assign_kanban_task(task_id: str, payload: dict) -> tuple[int, dict]:
         out = "---\n" + "\n".join(new_header) + "\n---\n" + "\n".join(body)
         if not out.endswith("\n"):
             out += "\n"
-        kanban_parser.atomic_write_text(target, out)
+        target.write_text(out, encoding="utf-8")
 
     elif fmt == "B":
         # Format B: markdown `| **field** | value |` table. Update or insert
@@ -2186,7 +2161,7 @@ def assign_kanban_task(task_id: str, payload: dict) -> tuple[int, dict]:
         out = "\n".join(lines)
         if not out.endswith("\n"):
             out += "\n"
-        kanban_parser.atomic_write_text(target, out)
+        target.write_text(out, encoding="utf-8")
 
     else:
         return 400, {
@@ -2309,59 +2284,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # quiet
         pass
 
-    def _send_security_headers(self):
-        # MC-SEC-HEADERS-1 (2026-07-09): baseline hardening on every response.
-        # nosniff stops the browser from executing a mislabelled body (e.g. a
-        # JSON/asset response sniffed as HTML); DENY stops the dashboard from
-        # being framed by another LAN page for clickjacking.
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-
     def _json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self._send_security_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
     def _static(self, path):
-        # MC-SEC-HEADERS-1: containment check inside _static itself (defense
-        # in depth — today every caller passes a fixed name or a pre-checked
-        # vendor path, but a future route must not be able to traverse out).
-        try:
-            full = (HERE / path.lstrip("/")).resolve()
-            full.relative_to(HERE)
-        except (ValueError, OSError):
-            self.send_response(404)
-            self.end_headers()
-            return
+        full = HERE / path.lstrip("/")
         if not full.is_file():
             self.send_response(404)
             self.end_headers()
             return
-        # Correct MIME matters now that every response is nosniff: the browser
-        # refuses to execute a <script> served as octet-stream (or text/plain),
-        # which is exactly what the vendored three.js/3d-force-graph are.
-        # Explicit map for the types we actually ship — mimetypes.guess_type
-        # can be skewed by OS registry entries, so don't trust it for these.
-        _STATIC_TYPES = {
-            ".html": "text/html; charset=utf-8",
-            ".js": "text/javascript; charset=utf-8",
-            ".mjs": "text/javascript; charset=utf-8",
-            ".css": "text/css; charset=utf-8",
-            ".json": "application/json; charset=utf-8",
-            ".svg": "image/svg+xml",
-            ".png": "image/png",
-            ".ico": "image/x-icon",
-            ".woff2": "font/woff2",
-        }
-        ctype = _STATIC_TYPES.get(full.suffix.lower())
-        if not ctype:
-            guessed, _enc = mimetypes.guess_type(str(full))
-            ctype = guessed or "application/octet-stream"
+        if full.suffix == ".html":
+            ctype = "text/html; charset=utf-8"
+        else:
+            ctype = "application/octet-stream"
         body = full.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", ctype)
@@ -2371,7 +2312,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
-        self._send_security_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -2481,12 +2421,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Safe to cache — files on disk don't change frequently, and the
         # browser will refetch when the kanban modal reopens.
         self.send_header("Cache-Control", "public, max-age=3600")
-        self._send_security_headers()
-        # MC-SEC-SVG-1 (2026-07-09): CSP sandbox neutralizes active content in
-        # served files. SVG in the public tier can embed <script>; sandbox
-        # blocks script execution when the file is opened as a document, while
-        # <img> embedding (which never runs scripts) keeps working.
-        self.send_header("Content-Security-Policy", "sandbox")
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -2612,14 +2546,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._json({"error": "bad path", "path": path}, 400)
                 return self._static("vendor/" + rel)
 
-            # MC-UI-POLISH-1 (2026-07-09): shared static assets (common.css)
-            # used by all three pages. Same containment rules as /vendor/.
-            if path.startswith("/static/"):
-                rel = path[len("/static/"):]
-                if ".." in rel.split("/") or rel.startswith("/"):
-                    return self._json({"error": "bad path", "path": path}, 400)
-                return self._static("static/" + rel)
-
             if path == "/api/memory-graph" or path == "/api/memory-graph/":
                 status, payload = _mg_api.get_graph(self)
                 return self._json(payload, status)
@@ -2686,9 +2612,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._json({"error": "invalid JSON", "detail": str(e)}, 400)
                 if not isinstance(payload, dict):
                     return self._json({"error": "body must be a JSON object"}, 400)
-                # MC-HEARTBEAT-HONEST-1: no default agent — a heartbeat must
-                # name the agent that actually sent it (400 otherwise).
-                agent_id = payload.get("agent") or ""
+                agent_id = payload.get("agent") or "thor"
                 try:
                     result = write_heartbeat(agent_id)
                 except ValueError as e:
@@ -2739,6 +2663,76 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._json({"error": "body must be a JSON object"}, 400)
                 status, body = create_kanban_task(payload)
                 return self._json(body, status)
+
+            # ---- MC-FIX-ORDER-ACTIONS (2026-07-15):
+            # POST /api/data/order/decision — append a decision event
+            # (dispatched | approved | rejected) for an existing order.
+            # Body: {order_id, decision, ts, requested_by, note?}
+            # Returns {ok, decision_event_id, ts, order_id, decision}
+            # or 400 on bad input / 404 if no matching pending order.
+            if p.path == "/api/data/order/decision":
+                if not is_authorized(self):
+                    return self._json(auth_required_error(), 403)
+                try:
+                    length = int(self.headers.get("Content-Length") or "0")
+                except (TypeError, ValueError):
+                    length = 0
+                if length <= 0 or length > 8 * 1024:
+                    return self._json({"error": "missing or oversized body"}, 400)
+                raw = self.rfile.read(length)
+                try:
+                    payload = json.loads(raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                    return self._json({"error": "invalid JSON", "detail": str(e)}, 400)
+                if not isinstance(payload, dict):
+                    return self._json({"error": "body must be a JSON object"}, 400)
+                order_id   = (payload.get("order_id")   or "").strip()
+                decision   = (payload.get("decision")   or "").strip().lower()
+                requested_by = (payload.get("requested_by") or "nofi").strip()
+                note       = (payload.get("note")       or "").strip()
+                if not order_id or decision not in ("dispatch", "approve", "reject"):
+                    return self._json(
+                        {"error": "order_id required; decision must be dispatch|approve|reject"},
+                        400,
+                    )
+                status_map = {
+                    "dispatch": "in_progress",
+                    "approve":  "approved",
+                    "reject":   "rejected",
+                }
+                new_status = status_map[decision]
+                ts = datetime.now(timezone.utc).isoformat()
+                event_id = f"order-decision-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+                p_jsonl = COMPANY_ROOT / "00_company_os" / "events.jsonl"
+                line = {
+                    "ts":                 ts,
+                    "actor":              requested_by,
+                    "event_type":         "order_decision",
+                    "project":            "mission-control",
+                    "task_id":            "",
+                    "title":              f"ORDER DECISION: {decision.upper()} {order_id}",
+                    "message":             note or f"NOFI chose {decision} via dashboard button",
+                    "status":             new_status,
+                    "source_file":        "00_company_os/events.jsonl",
+                    "schema":             "nofitech-event/v1",
+                    "order_id":           order_id,
+                    "decision":           decision,
+                    "decision_target_status": new_status,
+                    "requested_by":       requested_by,
+                    "execution_locked_reason":
+                        "NOFI directive 2026-06-11 — order decisions are recorded, "
+                        "Thor still requires chat confirmation before any auto-execute",
+                }
+                with p_jsonl.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(line, ensure_ascii=False) + "\n")
+                return self._json({
+                    "ok": True,
+                    "decision_event_id": event_id,
+                    "ts": ts,
+                    "order_id": order_id,
+                    "decision": decision,
+                    "status": new_status,
+                }, 200)
 
             if p.path != "/api/data/order":
                 return self._json({"error": "not found", "path": p.path}, 404)

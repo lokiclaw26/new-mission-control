@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mission Control — NofiTech</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛰️</text></svg>">
+<title>NofiTech Mission Control v1.15.0 — Operational Live Monitor</title>
 <style>
   :root {
     --bg: #0e1116;
@@ -13,8 +12,13 @@
     --line: #30363d;
     --line-soft: #21262d;
     --text: #e6edf3;
-    --text2: #8b949e;
-    --text3: #6e7681;
+    /* MC-FIX-SIDEBAR-CONTRAST: bumped text2/text3 values so sidebar
+       nav labels (var(--text2)) and footer+clock subtext (var(--text3))
+       meet WCAG AA contrast against --panel:#161b22 — text2 was #8b949e
+       (4.2:1 nav-only fonts), text3 was #6e7681 (3.7:1). Bumped to a
+       one-step-lighter neutral. */
+    --text2: #a3b1bf;
+    --text3: #8b95a3;
     --green: #3fb950;
     --amber: #d29922;
     --red:   #f85149;
@@ -162,31 +166,20 @@
     display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1; justify-content: center;
   }
   .topbar .right { display: flex; gap: 8px; align-items: center; }
-  /* MC-UI-CONSOLE-1: pills live inside one segmented status strip */
-  .status-strip {
-    display: flex; align-items: stretch;
-    background: var(--bg); border: 1px solid var(--line-soft);
-    border-radius: 999px; overflow: hidden;
-    box-shadow: var(--edge);
-  }
   .topbar .pill {
-    font-size: 11px; padding: 5px 13px;
-    background: transparent; border: none; color: var(--text2);
+    font-size: 11px; padding: 4px 9px; border-radius: 999px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--text2);
     white-space: nowrap;
-    border-left: 1px solid var(--line-soft);
-    display: inline-flex; align-items: center;
   }
-  .status-strip .pill:first-child { border-left: none; }
-  .topbar .pill.green  { color: var(--green); }
-  .topbar .pill.amber  { color: var(--amber); }
-  .topbar .pill.red    { color: var(--red); }
-  .topbar .pill.cyan   { color: var(--cyan); }
+  .topbar .pill.green  { color: var(--green); border-color: var(--green); }
+  .topbar .pill.amber  { color: var(--amber); border-color: var(--amber); }
+  .topbar .pill.red    { color: var(--red);   border-color: var(--red); }
+  .topbar .pill.cyan   { color: var(--cyan);  border-color: var(--cyan); }
   .topbar .pill.gray   { color: var(--text3); }
   .topbar button {
-    background: var(--panel-2); color: var(--text2);
-    border: 1px solid var(--line-soft); border-radius: 8px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
     padding: 6px 12px; cursor: pointer; font-size: 12px; font-weight: 500;
-    transition: color 0.12s, border-color 0.12s;
   }
   .topbar button:hover { border-color: var(--cyan); color: var(--cyan); }
   .topbar .last-refreshed {
@@ -209,111 +202,60 @@
   }
   .lan-warning strong { color: var(--amber); }
 
-  /* ---------- Section / panel (MC-UI-CONSOLE-1: depth over borders) ---------- */
+  /* ---------- Section / panel ---------- */
   section {
-    border: none;
-    border-radius: var(--radius, 12px);
+    border: 1px solid var(--line);
+    border-radius: 8px;
     background: var(--panel);
-    box-shadow: var(--shadow-1), var(--edge);
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     overflow: hidden;
   }
   section > h2 {
     font-size: 12px; font-weight: 600;
-    margin: 0; padding: 11px 16px;
-    border-bottom: 1px solid var(--line-soft);
+    margin: 0; padding: 10px 14px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--line);
     display: flex; align-items: center; gap: 8px;
-    text-transform: uppercase; letter-spacing: 0.06em;
+    text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--text2);
   }
   section > h2 .num { color: var(--text3); font-weight: 400; }
   section > h2 .hint { color: var(--text3); font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: auto; font-size: 11px; }
-  section .body { padding: 14px 16px; }
+  section .body { padding: 14px; }
 
-  /* MC-UI-CONSOLE-1: two-column console zone */
-  .console-grid { display: grid; grid-template-columns: 1fr; gap: 0 14px; align-items: start; }
-  @media (min-width: 1000px) {
-    .console-grid { grid-template-columns: 5fr 7fr; }
-  }
-  /* Tables inside the console columns scroll horizontally instead of
-     crushing their cells into vertical letter-soup. */
-  .console-grid section .body { overflow-x: auto; }
-  #tasks table { min-width: 540px; }
-  #projects table { min-width: 620px; }
-  /* Evidence + Blocked-reason are dev detail — visible only when the
-     "Detailed" toggle is on (they made the table unreadably wide). */
-  body:not(.detailed) #tasks th:nth-child(6),
-  body:not(.detailed) #tasks td:nth-child(6),
-  body:not(.detailed) #tasks th:nth-child(8),
-  body:not(.detailed) #tasks td:nth-child(8) { display: none; }
-
-  /* Attention section: merged Action Required + Warnings + Pending Orders */
-  .attn-sub {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 10px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.08em; color: var(--text3);
-    margin: 12px 0 6px 0;
-  }
-  .attn-sub:first-child { margin-top: 0; }
-  .attn-sub .hint { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: auto; }
-
-  /* Collapsible detail cards (Logs / GitHub) */
-  details.section-collapse {
-    border: none;
-    border-radius: var(--radius, 12px);
-    background: var(--panel);
-    box-shadow: var(--shadow-1), var(--edge);
-    margin-bottom: 14px;
-    overflow: hidden;
-  }
-  details.section-collapse > summary {
-    cursor: pointer; user-select: none;
-    font-size: 12px; font-weight: 600;
-    padding: 11px 16px;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--text2);
-    display: flex; align-items: center; gap: 8px;
-    list-style: none;
-  }
-  details.section-collapse > summary::-webkit-details-marker { display: none; }
-  details.section-collapse > summary::before {
-    content: "▸"; color: var(--text3); font-size: 10px; transition: transform 0.15s;
-  }
-  details.section-collapse[open] > summary::before { transform: rotate(90deg); }
-  details.section-collapse[open] > summary { border-bottom: 1px solid var(--line-soft); }
-  details.section-collapse > summary .hint { color: var(--text3); font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: auto; font-size: 11px; }
-  details.section-collapse .body { padding: 14px 16px; }
-
-  /* ---------- KPI strip (Overview) — MC-UI-CONSOLE-1 ---------- */
+  /* ---------- Summary cards (Overview) ---------- */
+  /* MC-FIX-OVERVIEW-GRID: fixed 6-col layout so all 6 metric cards fit
+     on one row at >=1100px instead of 5+1 orphaned row. minmax(150px,1fr)
+     ensures cards never get cramped. Falls back to auto-fit at <900px. */
   .summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
+    gap: 12px;
+  }
+  @media (min-width: 1100px) {
+    .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  }
+  @media (max-width: 700px) {
+    .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   .summary-card {
     background: var(--panel-2);
-    border: none;
-    border-radius: var(--radius-sm, 10px);
-    box-shadow: var(--edge);
-    padding: 12px 16px;
-    text-align: left;
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
   }
-  .summary-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-1), var(--edge); }
   .summary-label {
-    font-size: 10px;
-    color: var(--text3);
+    font-size: 0.85em;
+    color: var(--text2);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 4px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
   }
   .summary-value {
-    font-size: 30px;
-    font-weight: 650;
-    line-height: 1.15;
-    letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums;
+    font-size: 2em;
+    font-weight: 600;
+    line-height: 1.1;
     word-break: break-word;
   }
   .summary-value.green { color: var(--green); }
@@ -321,11 +263,6 @@
   .summary-value.amber { color: var(--amber); }
   .summary-value.blue  { color: var(--blue); }
   .summary-value.gray  { color: var(--text3); }
-  /* The "Last check" tile holds a pulse chip + relative time, not a big
-     numeral — render it at chip scale so it doesn't wrap awkwardly. */
-  .summary-value.last-check { font-size: 14px; display: flex; align-items: center; gap: 6px; min-height: 35px; }
-  .summary-value.last-check .live-pulse { font-size: 11px; }
-  .summary-value.last-check .last-check-rel { font-size: 12px; }
   .summary-value.yellow{ color: var(--yellow); }
   .summary-reason {
     font-size: 0.75em;
@@ -376,7 +313,7 @@
     50%      { box-shadow: 0 0 0 6px rgba(0, 200, 100, 0); }
   }
 
-  /* ---------- Agent hero cards — MC-UI-CONSOLE-1 ---------- */
+  /* ---------- Agent cards ---------- */
   .agent-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -384,40 +321,11 @@
   }
   .agent-card {
     background: var(--panel-2);
-    border: none;
+    border: 1px solid var(--line);
     border-left: 4px solid var(--text3);
-    border-radius: var(--radius-sm, 10px);
-    box-shadow: var(--edge);
-    padding: 14px 16px;
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    border-radius: 8px;
+    padding: 16px;
   }
-  .agent-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-1), var(--edge); }
-  .agent-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-  .agent-avatar {
-    width: 42px; height: 42px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px; flex: 0 0 auto;
-    background: var(--bg);
-    box-shadow: 0 0 0 2px var(--ac, var(--text3)), 0 0 12px -2px var(--ac, transparent);
-  }
-  .agent-head .agent-title { min-width: 0; }
-  .agent-status-chip {
-    margin-left: auto; flex: 0 0 auto;
-    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-    padding: 3px 9px; border-radius: 999px;
-    background: var(--bg); color: var(--text3);
-  }
-  .agent-card.active .agent-status-chip { color: var(--green); box-shadow: 0 0 0 1px var(--green); }
-  .agent-card.idle .agent-status-chip { color: var(--amber); }
-  .agent-card.blocked .agent-status-chip { color: var(--red); box-shadow: 0 0 0 1px var(--red); }
-  /* 24h activity bar: 24 hourly buckets from events.jsonl */
-  .agent-activity { display: flex; gap: 2px; align-items: flex-end; height: 18px; margin-top: 10px; }
-  .agent-activity .hr {
-    flex: 1 1 0; min-height: 2px; border-radius: 1px;
-    background: var(--line);
-  }
-  .agent-activity .hr.on { background: var(--ac, var(--cyan)); }
-  .agent-activity-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
   .agent-card.active  { border-left-color: var(--green); }
   .agent-card.idle    { border-left-color: var(--amber); }
   .agent-card.blocked { border-left-color: var(--red); }
@@ -454,8 +362,6 @@
   }
   .agent-row { margin-top: 8px; font-size: 0.9em; }
   .agent-row .lbl { color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 2px; }
-  .agent-row .ca-link { color: var(--cyan); text-decoration: none; font-family: var(--font-mono); font-size: 12px; }
-  .agent-row .ca-link:hover { text-decoration: underline; }
   .agent-blocker { color: var(--red); margin-top: 8px; font-size: 0.9em; }
 
   /* ---------- Action Required panel ---------- */
@@ -552,11 +458,68 @@
   }
   .warnings-row .status-pill.pending    { background: rgba(255,193,7,0.15);  color: var(--yellow); border: 1px solid var(--yellow); }
   .warnings-row .status-pill.in_progress { background: rgba(0,150,255,0.15);  color: var(--blue);   border: 1px solid var(--blue);   }
+  /* MC-FIX-ORDER-ACTIONS: terminal states for order status pill */
+  .warnings-row .status-pill.approved   { background: rgba(63,185,80,0.18);  color: var(--green);  border: 1px solid var(--green);  }
+  .warnings-row .status-pill.rejected   { background: rgba(139,148,158,0.18);color: var(--text3);  border: 1px solid var(--line-soft); }
   .warnings-row .requested-by {
     flex: 0 0 auto;
     color: var(--text3);
     font-size: 0.8em;
     font-style: italic;
+  }
+
+  /* MC-FIX-ORDER-ACTIONS: container + per-decision button variants */
+  .warnings-row .order-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .warnings-row .dispatch-btn {
+    border-color: var(--blue) !important;
+    color: var(--blue) !important;
+    background: rgba(0, 150, 255, 0.06) !important;
+  }
+  .warnings-row .dispatch-btn:hover {
+    background: var(--blue) !important;
+    color: #fff !important;
+  }
+  .warnings-row .approve-btn-order {
+    border-color: var(--green) !important;
+    color: var(--green) !important;
+    background: rgba(63, 185, 80, 0.06) !important;
+  }
+  .warnings-row .approve-btn-order:hover {
+    background: var(--green) !important;
+    color: #0e1116 !important;
+  }
+  .warnings-row .reject-btn {
+    border-color: var(--text3) !important;
+    color: var(--text3) !important;
+    background: rgba(139, 148, 158, 0.06) !important;
+  }
+  .warnings-row .reject-btn:hover {
+    background: var(--text3) !important;
+    color: #0e1116 !important;
+  }
+  .warnings-row .fix-btn[disabled] {
+    cursor: default !important;
+    opacity: 0.55;
+  }
+  .order-decision-flash {
+    flex: 0 0 100%;
+    margin-top: 6px;
+    font-size: 0.8em;
+    color: var(--green);
+    background: rgba(63, 185, 80, 0.08);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    border-radius: 3px;
+    padding: 4px 8px;
+    animation: mc-flash-in 0.25s ease-out;
+  }
+  @keyframes mc-flash-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   /* ---------- Badges (kept for tables) ---------- */
@@ -580,6 +543,21 @@
   .badge.cyan   { color: var(--cyan);  border-color: var(--cyan); }
   .badge.gray   { color: var(--text3); }
   .dash { color: var(--text3); cursor: help; border-bottom: 1px dotted var(--text3); }
+
+  /* MC-FIX-APPROVAL-CLICKABLE: button around the YES badge so NOFI can
+     approve from the dashboard. Looks identical to a badge when idle,
+     picks up cyan accent on hover. */
+  .approve-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font: inherit;
+  }
+  .approve-btn:hover .badge { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+  .approve-btn[disabled] { cursor: default; opacity: 0.65; }
+  .approve-btn .badge.approved { background: rgba(63,185,80,0.15); color: var(--green); border-color: var(--green); }
 
   /* ---------- Demo banner ---------- */
   .demo-banner {
@@ -608,11 +586,6 @@
   .filter-btn:hover { color: var(--text); border-color: var(--text3); }
   .filter-btn.active { color: var(--cyan); border-color: var(--cyan); }
 
-  /* MC-TASKS-PAGER-1: prev/next pager under the Tasks table */
-  .tasks-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; font-size: 12px; }
-  .tasks-pager .filter-btn { padding: 4px 12px; }
-  .tasks-pager .filter-btn:disabled { opacity: 0.35; cursor: default; }
-
   .ts-iso { color: var(--text3); font-size: 10px; margin-left: 4px; opacity: 0.7; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; word-break: break-word; }
@@ -627,9 +600,6 @@
   /* Tasks table — pills no-wrap, others wrap */
   #tasks table td .badge, #tasks table th .badge { white-space: nowrap; }
   #tasks table th, #tasks table td { white-space: normal; }
-  /* MC-UI-CONSOLE-1: agent + updated cells never wrap mid-word */
-  #tasks table td:nth-child(3), #tasks table th:nth-child(3),
-  #tasks table td:nth-child(7), #tasks table th:nth-child(7) { white-space: nowrap; }
   #tasks table td.id, #tasks table th.id { white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 
   /* Empty-state card for tasks */
@@ -691,45 +661,8 @@
 
   /* MC-KANBAN-MOVE-1: Kanban CSS moved to /kanban (kanban.html) */
 
-  /* ---------- MC-UI-POLISH-1: "On this page" section nav in the sidebar ---------- */
-  .page-nav {
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px solid var(--line-soft);
-  }
-  .page-nav .page-nav-title {
-    padding: 2px 16px 4px 16px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text3);
-  }
-  .page-nav a {
-    display: block;
-    padding: 4px 16px 4px 19px;
-    font-size: 12px;
-    color: var(--text2);
-    text-decoration: none;
-    border-left: 3px solid transparent;
-  }
-  .page-nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
-  .page-nav a.current { color: var(--cyan); border-left-color: var(--cyan); }
-
-  /* MC-UI-POLISH-1: live mini-stats in the sidebar footer */
-  .sidebar-stats {
-    margin-bottom: 8px;
-    padding-bottom: 8px;
-    border-bottom: 1px dashed var(--line, #333);
-    font-size: 11px;
-    color: var(--text2);
-    line-height: 1.6;
-  }
-  .sidebar-stats .stat-num { color: var(--text); font-weight: 600; }
-  .sidebar-stats .stat-num.green { color: var(--green); }
-  .sidebar-stats .stat-num.amber { color: var(--amber); }
-  .sidebar-stats .stat-num.red   { color: var(--red); }
+  /* ---------- Badges (kept for tables) ---------- */
 </style>
-<link rel="stylesheet" href="/static/common.css">
 </head>
 <body>
 
@@ -739,26 +672,15 @@
     <a href="/" class="nav-tab active">⚡ Main</a>
     <a href="/kanban" class="nav-tab">🗂 Kanban</a>
     <a href="/memory-graph" class="nav-tab">🧠 Memory Graph</a>
-    <div class="page-nav" id="page-nav">
-      <div class="page-nav-title">On this page</div>
-      <a href="#sec-overview">Overview</a>
-      <a href="#sec-agents">Agents</a>
-      <a href="#sec-attention">Attention</a>
-      <a href="#sec-projects">Projects</a>
-      <a href="#sec-tasks">Tasks</a>
-      <a href="#sec-activity">Activity</a>
-      <a href="#sec-logs">Logs / Health</a>
-      <a href="#sec-github">GitHub</a>
-    </div>
   </nav>
   <div class="sidebar-footer">
-    <div class="sidebar-stats" id="sidebar-stats" title="Live counts (auto-refresh)">loading…</div>
     <div class="sidebar-clock" id="sidebar-clock" title="Live Dubai time (UTC+4) — source of truth for all task timestamps">
       <div class="clock-time" id="clock-time">--:--:--</div>
       <div class="clock-date" id="clock-date">— —</div>
       <div class="clock-tz">Dubai · UTC+4</div>
     </div>
-    v1.19.0
+    v1.17.0+memory<br>
+    <button class="token-btn" id="token-btn" style="margin-top:6px;width:100%;font-size:11px;padding:4px;background:transparent;color:var(--text2);border:1px solid var(--line);border-radius:3px;cursor:pointer;" title="Set MC_ADMIN_TOKEN (required for write actions)">🔑 Token</button>
   </div>
 </aside>
 <main class="main-content">
@@ -766,103 +688,95 @@
 <!-- ========== Command-center header ========== -->
 <header class="topbar" role="banner">
   <div class="brand">
-    <span class="title">⚡ NofiTech Mission Control</span>
+    <span class="title">🛡️ NofiTech Mission Control</span>
     <span class="subtitle" id="version-pill">v— · live</span>
   </div>
   <div class="center">
-    <!-- MC-UI-CONSOLE-1: pills merged into one segmented status strip -->
-    <div class="status-strip">
-      <span class="pill" id="health-pill" title="System health">health: …</span>
-      <span class="pill" id="project-pill"  title="Current project">project: …</span>
-      <span class="pill" id="verified-pill" title="Last Argus verification">verified: …</span>
-      <span class="pill cyan" id="mode-pill" title="Data mode">LAN</span>
-      <span class="pill gray tech-detail" id="lan-pill" title="LAN IP">LAN: …</span>
-    </div>
+    <span class="pill" id="health-pill" title="System health">health: …</span>
+    <span class="pill" id="project-pill"  title="Current project">project: …</span>
+    <span class="pill" id="verified-pill" title="Last Argus verification">verified: …</span>
   </div>
   <div class="right">
-    <button id="btn-refresh" onclick="loadAll()" title="Refresh all panels now">↻ Refresh</button>
+    <span class="pill cyan" id="mode-pill" title="Data mode">LAN · Real Data Only</span>
+    <span class="pill gray tech-detail" id="lan-pill" title="LAN IP">LAN: …</span>
+    <button id="btn-refresh" onclick="loadAll()">↻ REFRESH</button>
     <button id="btn-detail" onclick="toggleDetail()" title="Toggle technical detail">Detailed</button>
   </div>
 </header>
 
 <div class="topbar-meta" style="display:flex;justify-content:space-between;align-items:center;margin:-8px 0 12px 0;padding:0 4px">
   <span class="last-refreshed" id="last-refreshed">Last refreshed: never · auto-refresh: 5s</span>
+  <span class="last-refreshed" id="version-subtitle" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">v—</span>
 </div>
 
-<div class="lan-warning" id="lan-warning">⚠ <strong>Local/LAN use only.</strong> This dashboard has no authentication in v1. Do not expose to the public internet. Intended for trusted networks (home/lab).<button type="button" class="lan-dismiss" onclick="dismissLanWarning()" title="Hide this notice (stays hidden on this browser)">✕</button></div>
+<div class="lan-warning" id="lan-warning">⚠ <strong>Local/LAN use only.</strong> This dashboard has no authentication in v1. Do not expose to the public internet. Intended for trusted networks (home/lab).</div>
 
-<!-- ============================================================
-     MC-UI-CONSOLE-1 (2026-07-10): homepage restructured as a console.
-     KPI strip → agent hero row → two-column zone (Attention+Projects |
-     Tasks+Activity) → collapsible Logs/GitHub. Every renderer target id
-     (#action, #warnings, #orders, hints…) is preserved, so the JS render
-     functions did not have to change shape.
-     ============================================================ -->
-
-<!-- ========== Overview: KPI strip ========== -->
-<section id="sec-overview">
-  <h2>Overview <span class="hint" id="overview-hint">6 metrics</span></h2>
-  <div class="body"><div id="overview" class="summary-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></div>
+<!-- ========== 1. Overview ========== -->
+<section>
+  <h2><span class="num">1.</span> Overview <span class="hint" id="overview-hint">6 metrics</span></h2>
+  <div class="body"><div id="overview" class="summary-grid"></div></div>
 </section>
 
-<!-- ========== Agents: the hero row ========== -->
-<section id="sec-agents">
-  <h2>Agents <span class="hint">thor · forge · argus</span></h2>
-  <div class="body"><div id="agents" class="agent-grid"><div class="skeleton" style="height:120px"></div><div class="skeleton" style="height:120px"></div><div class="skeleton" style="height:120px"></div></div></div>
+<!-- ========== 2. Agents ========== -->
+<section>
+  <h2><span class="num">2.</span> Agents <span class="hint">3 cards</span></h2>
+  <div class="body"><div id="agents" class="agent-grid"></div></div>
 </section>
 
-<!-- ========== Two-column console zone ========== -->
-<div class="console-grid">
-  <div class="console-col">
+<!-- ========== 2b. Action Required (NEW) ========== -->
+<section>
+  <h2><span class="num">3.</span> Action Required <span class="hint" id="action-hint">scanning…</span></h2>
+  <div class="body"><div id="action" class="action-panel"></div></div>
+</section>
 
-    <!-- Attention: Action Required + Warnings + Pending Orders, merged -->
-    <section id="sec-attention">
-      <h2>Attention <span class="hint" id="attention-hint">needs you first</span></h2>
-      <div class="body">
-        <div class="attn-sub">Action required <span class="hint" id="action-hint">scanning…</span></div>
-        <div id="action" class="action-panel"><div class="skeleton" style="height:40px"></div></div>
-        <div class="attn-sub">Warnings <span class="hint" id="warnings-hint">…</span></div>
-        <div id="warnings" class="action-panel"></div>
-        <div class="attn-sub">Pending orders <span class="hint" id="orders-hint">…</span></div>
-        <div id="orders-banner" class="orders-banner">
-          ⚠ Orders require chat confirmation: "Thor, do it" or
-          "Thor, execute pending order [id]". Buttons do NOT auto-execute.
-        </div>
-        <div id="orders" class="action-panel"></div>
-      </div>
-    </section>
+<!-- ========== 3. Tasks ========== -->
+<section>
+  <h2><span class="num">4.</span> Tasks <span class="hint" id="tasks-hint">real only</span></h2>
+  <div class="body"><div id="tasks"></div></div>
+</section>
 
-    <section id="sec-projects">
-      <h2>Projects <span class="hint" id="projects-hint">…</span></h2>
-      <div class="body"><div id="projects"><div class="skeleton" style="height:60px"></div></div></div>
-    </section>
+<!-- ========== 4. Projects ========== -->
+<section>
+  <h2><span class="num">5.</span> Projects <span class="hint" id="projects-hint">…</span></h2>
+  <div class="body"><div id="projects"></div></div>
+</section>
 
-  </div>
-  <div class="console-col">
+<!-- ========== 5. Provider / Model (REMOVED at Stage 17) ========== -->
+<!-- Panel removed per NOFI directive. The /api/data/provider endpoint is
+     still served (some hidden API consumer may rely on it), but the panel
+     itself is no longer rendered. No panel render call in loadAll(). -->
 
-    <section id="sec-tasks">
-      <h2>Tasks <span class="hint" id="tasks-hint">real only</span></h2>
-      <div class="body"><div id="tasks"><div class="skeleton" style="height:200px"></div></div></div>
-    </section>
-
-    <section id="sec-activity">
-      <h2>Recent activity <span class="hint" id="activity-hint">…</span></h2>
-      <div class="body"><div id="activity"><div class="skeleton" style="height:60px"></div></div></div>
-    </section>
-
-  </div>
-</div>
-
-<!-- ========== Collapsible detail cards ========== -->
-<details class="section-collapse" id="sec-logs">
-  <summary>Logs / Health <span class="hint" id="logs-hint">…</span></summary>
+<!-- ========== 6. Logs / Health ========== -->
+<section>
+  <h2><span class="num">6.</span> Logs / Health <span class="hint" id="logs-hint">…</span></h2>
   <div class="body"><div id="logs"></div></div>
-</details>
+</section>
 
-<details class="section-collapse" id="sec-github">
-  <summary>GitHub Connection <span class="hint" id="github-hint">live</span></summary>
-  <div class="body"><div id="github" class="summary-grid"></div></div>
-</details>
+<!-- ========== 6b. Warnings (NEW at Stage 17) ========== -->
+<section>
+  <h2><span class="num">7.</span> Warnings <span class="hint" id="warnings-hint">…</span></h2>
+  <div class="body"><div id="warnings" class="action-panel"></div></div>
+</section>
+
+<!-- ========== 8. Pending Orders (NEW at Stage 19) ========== -->
+<section>
+  <h2><span class="num">8.</span> Pending Orders <span class="hint" id="orders-hint">…</span></h2>
+  <div class="body">
+    <div id="orders-banner" class="orders-banner">
+      ⚠ Orders require chat confirmation: "Thor, do it" or
+      "Thor, execute pending order [id]". Buttons do NOT auto-execute.
+    </div>
+    <div id="orders" class="action-panel"></div>
+  </div>
+</section>
+
+<!-- ========== 9. GitHub Connection (NEW at Stage 20) ========== -->
+<section>
+  <h2><span class="num">9.</span> GitHub Connection <span class="hint" id="github-hint">live</span></h2>
+  <div class="body">
+    <div id="github" class="summary-grid"></div>
+  </div>
+</section>
 
 <!-- Section 10 (Kanban) moved to /kanban page — see kanban.html (MC-KANBAN-MOVE-1, 2026-06-16) -->
 <div class="kanban-quicklink-card" style="background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:18px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -877,6 +791,7 @@
   <span id="foot-version">v— · live</span>
   <span id="foot-lan">LAN: detecting…</span>
   <span id="foot-uptime">up —</span>
+  <span id="foot-key">API key: not loaded</span>
   <span class="spacer" style="flex:1"></span>
   <span>local only · manual refresh · 3 agents</span>
 </footer>
@@ -887,15 +802,39 @@ const esc = (s) => String(s ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<"
 const dashOr = (v, reason) => v === null || v === undefined || v === "" ? `<span class="muted" title="${esc(reason || 'no source')}">—</span>` : esc(v);
 const badge = (label, cls) => `<span class="badge ${cls || 'gray'}">${esc(label)}</span>`;
 
-// MC-NO-AUTH-1 (2026-07-10): the MC_ADMIN_TOKEN gate is retired — this is a
-// personal single-user page on a trusted home LAN. authFetch is now a plain
-// JSON fetch; the name is kept so the write call-sites don't change.
+// MC-MEMORY-GRAPH-3A (2026-06-17): LAN writes (e.g. POST /api/data/order) need
+// MC_ADMIN_TOKEN. The browser can't read the server env, so the user pastes the
+// token here and we persist it in localStorage. All write fetches go through
+// authFetch() which auto-includes X-MC-Admin-Token. On 401/403 it offers a
+// re-paste prompt. This matches the kanban/memory-graph pages.
+const MC_TOKEN_KEY = "mc_admin_token";
+function getStoredToken() {
+  try { return localStorage.getItem(MC_TOKEN_KEY) || ""; } catch (e) { return ""; }
+}
+function setStoredToken(v) {
+  try { if (v) localStorage.setItem(MC_TOKEN_KEY, v); else localStorage.removeItem(MC_TOKEN_KEY); } catch (e) {}
+}
+function promptForToken() {
+  const cur = getStoredToken();
+  const v = prompt("Paste MC_ADMIN_TOKEN (the value from start-mc.sh):", cur || "");
+  if (v === null) return;
+  setStoredToken(v.trim());
+  if (v.trim()) alert("Token saved. Write actions will now include X-MC-Admin-Token.");
+  else alert("Token cleared. Write actions will fail until you set one.");
+}
 async function authFetch(url, opts) {
   opts = opts || {};
   opts.cache = "no-store";
   opts.headers = Object.assign({}, opts.headers || {});
   opts.headers["Content-Type"] = opts.headers["Content-Type"] || "application/json";
-  return fetch(url, opts);
+  const t = getStoredToken();
+  if (t) opts.headers["X-MC-Admin-Token"] = t;
+  const r = await fetch(url, opts);
+  if (r.status === 401 || r.status === 403) {
+    if (t) { if (confirm(`Server rejected the stored token (HTTP ${r.status}). Re-paste?`)) promptForToken(); }
+    else { promptForToken(); }
+  }
+  return r;
 }
 
 async function fetchJSON(url) {
@@ -907,19 +846,9 @@ async function fetchJSON(url) {
 // --- Stage 12: task filter state — Real only is the default ---
 let _tasksFilter = 'real';
 let _tasksCounts = { all: 0, demo: 0, real: 0 };
-// MC-TASKS-PAGER-1 (2026-07-10): the Tasks table paginates — 10 most recent
-// per page with prev/next arrows, instead of one endless table.
-const TASKS_PAGE_SIZE = 10;
-let _tasksPage = 0;
-let _tasksLastData = null;
-function tasksPageMove(delta) {
-  _tasksPage += delta;
-  if (_tasksLastData) renderTasks(_tasksLastData);
-}
 async function setTasksFilter(f) {
   if (!['all','demo','real'].includes(f)) f = 'real';
   _tasksFilter = f;
-  _tasksPage = 0;
   let url;
   if (f === 'real') url = '/api/data/tasks';
   else if (f === 'all') url = '/api/data/tasks?include=demo';
@@ -988,6 +917,11 @@ function renderOverview(d) {
       ${reason ? `<div class="summary-reason">${esc(reason)}</div>` : ''}
     </div>`;
 
+  // MC-FIX-SELF-REF: when current_project points back at the dashboard
+  // itself ("mission-control") it's a meaningless tautology. Hide it.
+  const isSelfRef = typeof pv === "string" &&
+    /mission-?control|server/i.test(pv);
+
   // Last-check value: live pulse + relative time from polled_at_iso.
   // Falls back to lc.value/rel for any old payload that lacks polled_at_iso.
   const lastCheckHtml = isLive
@@ -1024,100 +958,72 @@ function renderOverview(d) {
            : (d.warnings?.reason || null)),
 
     card("Current project",
-         pv ? esc(pv) : `<span class="muted" title="${esc(d.current_project?.reason || 'no source')}">—</span>`,
-         pv ? "blue" : "gray",
-         (!pv && d.current_project?.reason) ? d.current_project.reason : null),
+         isSelfRef
+           ? `<span class="muted" title="self — dashboard reporting itself">—</span>`
+           : (pv ? esc(pv) : `<span class="muted" title="${esc(d.current_project?.reason || 'no source')}">—</span>`),
+         isSelfRef ? "gray" : (pv ? "blue" : "gray"),
+         isSelfRef ? "self-reference hidden" : ((!pv && d.current_project?.reason) ? d.current_project.reason : null)),
 
     card("Last check",
          lastCheckHtml,
-         "gray last-check",
-         null),  // MC-UI-CONSOLE-1: full ISO lives in the tooltip, not the card
+         "gray",
+         polledAt ? `polled ${esc(polledAt)}` : null),
   ].join("");
 
   $("#overview").innerHTML = html;
 }
 
 // ============================================================
-// 2. Agents — hero cards (MC-UI-CONSOLE-1)
+// 2. Agents — 3 cards in a grid
 // ============================================================
-function renderAgents(d, logsD) {
+function renderAgents(d) {
   if (!d.agents || !d.agents.length) { $("#agents").innerHTML = `<div class="empty">no agents</div>`; return; }
-  const statusClass = (s) => (s === "in_progress" || s === "active") ? "active" : s === "idle" ? "idle" : s === "blocked" ? "blocked" : "unknown";
-  const AGENT_COLOR = { thor: "var(--thor-color)", forge: "var(--forge-color)", argus: "var(--argus-color)" };
-  const events = (logsD && logsD.events) || [];
-  const now = Date.now();
+  const statusClass = (s) => s === "active" ? "active" : s === "idle" ? "idle" : s === "blocked" ? "blocked" : "unknown";
+  const pillClass   = (s) => s === "active" ? "green"  : s === "idle" ? "amber" : s === "blocked" ? "red" : "gray";
 
   const cards = d.agents.map(a => {
-    const oid = String(a.name || "").trim().toLowerCase();
-    const ac = AGENT_COLOR[oid] || "var(--text3)";
     const cls = statusClass(a.status);
-    const stale = a.stale === true;
+    const pill = pillClass(a.status);
 
-    // status chip: live (pulsing) / idle / blocked / never-active
-    const chip = a.status === "in_progress"
-      ? `<span class="agent-status-chip" title="heartbeat fresh or running task">● live</span>`
-      : `<span class="agent-status-chip">${esc(a.status || "—")}</span>`;
-
-    // current task — links into the kanban with the search prefilled
+    // current assignment
     let caHtml;
     if (a.current_assignment && String(a.current_assignment).trim()) {
-      const tid = String(a.current_assignment).trim();
-      caHtml = `<a class="ca-link" href="/kanban?search=${encodeURIComponent(tid)}" title="Open on the kanban board">${esc(tid)}</a>`;
+      caHtml = esc(a.current_assignment);
     } else {
-      caHtml = `<span class="dash" title="${esc((a.reasons || []).join("; ") || "no current assignment")}">idle</span>`;
+      caHtml = `<span class="dash" title="${esc((a.reasons || []).join("; ") || "no current assignment")}">Idle</span>`;
     }
 
-    // last activity — rel time + stuck badge; the log file path is dev
-    // detail, shown only when "Detailed" is toggled on.
+    // last activity — show "Xm ago" with the log filename underneath,
+    // and a ⚠ stuck badge if the agent is stale (no fresh log in 30+ min
+    // while claiming to be spawning/in_progress).
     let laHtml;
+    const stale = a.stale === true;
     const staleTip = stale
       ? "No fresh log in 30+ min — agent may be stuck"
       : (a.mtime_age_seconds != null ? `Last log: ${esc(a.last_log || "(none)")}` : "no log yet");
     if (a.last_activity_iso) {
-      const stuck = stale ? ` <span class="stuck-badge" title="${staleTip}">⚠ stuck</span>` : "";
+      const badge = stale ? ` <span class="stuck-badge" title="${staleTip}">⚠ stuck</span>` : "";
       const logFile = a.last_log
-        ? `<div class="agent-log-file tech-detail" title="${esc(a.last_log)}">📄 ${esc(a.last_log.split("/").pop())}</div>`
+        ? `<div class="agent-log-file" title="${esc(a.last_log)}">📄 ${esc(a.last_log.split("/").pop())}</div>`
         : "";
-      laHtml = `<span title="${esc(a.last_activity_iso)}">${esc(relTime(a.last_activity_iso))}</span>${stuck}${logFile}`;
+      laHtml = `<span title="${esc(a.last_activity_iso)}">${esc(relTime(a.last_activity_iso))}</span>${badge}${logFile}`;
     } else if (a.last_activity) {
       laHtml = `<span>${esc(a.last_activity)}</span>`;
     } else {
       laHtml = `<span class="dash" title="${esc((a.reasons || []).join("; ") || "no activity yet")}">—</span>`;
     }
 
+    // blocker
     const blHtml = a.blocker
       ? `<div class="agent-blocker">⚠ ${esc(a.blocker)}</div>`
       : '';
 
-    // 24h activity bar — hourly buckets of this agent's events (oldest left)
-    const buckets = new Array(24).fill(0);
-    for (const e of events) {
-      if (String(e.officer || "").trim().toLowerCase() !== oid) continue;
-      const t = Date.parse(e.ts || "");
-      if (!t) continue;
-      const ageH = (now - t) / 3600000;
-      if (ageH < 0 || ageH >= 24) continue;
-      buckets[23 - Math.floor(ageH)] += 1;
-    }
-    const total24 = buckets.reduce((s, x) => s + x, 0);
-    const actHtml = `
-      <div class="agent-activity" title="${total24} event(s) in the last 24h">
-        ${buckets.map(c => `<div class="hr ${c > 0 ? 'on' : ''}" style="height:${c > 0 ? Math.min(100, 30 + c * 25) : 12}%"></div>`).join("")}
-      </div>
-      <div class="agent-activity-label">${total24 > 0 ? `${total24} event${total24 === 1 ? '' : 's'} · last 24h` : 'no events in the last 24h'}</div>`;
-
     return `
-      <div class="agent-card ${cls}${stale ? ' stale' : ''}" style="--ac:${ac}">
-        <div class="agent-head">
-          <div class="agent-avatar">${esc(a.emoji || "•")}</div>
-          <div class="agent-title">
-            <div class="agent-name">${esc(a.name)}${a.status === "in_progress" ? ' <span class="live-pulse" title="active right now (heartbeat fresh or running task)">live</span>' : ''}</div>
-            <div class="agent-role">${esc(a.role)}</div>
-          </div>
-          ${chip}
-        </div>
+      <div class="agent-card ${cls}${stale ? ' stale' : ''}">
+        <div class="agent-name"><span class="emoji">${esc(a.emoji || "•")}</span>${esc(a.name)}${a.status === "in_progress" ? ' <span class="live-pulse" title="active right now (heartbeat fresh or running task)">live</span>' : ''}</div>
+        <div class="agent-role">${esc(a.role)} · ${badge(a.status || "—", pill)}</div>
         <div class="agent-row">
-          <span class="lbl">Current task</span>
+          <span class="lbl">Current assignment</span>
           ${caHtml}
         </div>
         <div class="agent-row">
@@ -1125,7 +1031,6 @@ function renderAgents(d, logsD) {
           ${laHtml}
         </div>
         ${blHtml}
-        ${actHtml}
       </div>`;
   }).join("");
 
@@ -1139,9 +1044,27 @@ function renderActionRequired(overview, tasks, provider, logs, projects) {
   const issues = [];   // {level: 'warn'|'fail', icon, text}
   const notices = [];  // informational only
 
-  // MC-NO-LLM-CHECKS-1 (2026-07-10): provider-proxy / LLM-key checks removed
-  // per NOFI directive — the agents manage their own LLM config; the
-  // dashboard no longer nags about missing keys.
+  // 1. Provider proxy not connected
+  if (provider?.providers && Array.isArray(provider.providers)) {
+    for (const p of provider.providers) {
+      const cs = (p.connection_status || "").toLowerCase();
+      if (cs.includes("not connected") || cs.includes("down") || cs.includes("unreachable")) {
+        issues.push({ level: "warn", icon: "🔌",
+          text: `Provider proxy not connected: <strong>${esc(p.provider || p.slot || "unknown")}</strong> — ${esc(p.connection_detail || cs)}` });
+      }
+      // 2. Provider key missing
+      if (p.key_configured === false || cs.includes("not configured") || (p.connection_detail || "").toLowerCase().includes("no key")) {
+        const slot = p.slot || "?";
+        if (slot === "paid") {
+          issues.push({ level: "fail", icon: "🔑",
+            text: `Provider key missing: <strong>${esc(p.provider || "paid")}</strong> — .env not configured or key absent` });
+        } else {
+          notices.push({ level: "warn", icon: "🔑",
+            text: `Provider config incomplete: <strong>${esc(p.provider || p.slot || "unknown")}</strong> — ${esc(p.connection_detail || cs)}` });
+        }
+      }
+    }
+  }
 
   // 3. No real tasks yet
   const realCount = tasks?.count ?? (tasks?.tasks ? tasks.tasks.length : 0);
@@ -1179,9 +1102,20 @@ function renderActionRequired(overview, tasks, provider, logs, projects) {
     rows = `<div class="action-row ok"><span class="icon">✓</span> No action required — all systems nominal.</div>`;
     if (hint) hint.textContent = "all clear";
   } else {
-    rows = issues.map(i =>
-      `<div class="action-row ${i.level}"><span class="icon">${i.icon}</span> ${i.text}</div>`
-    ).join("");
+    // MC-FIX-ATTENTION-ACTIONS: each row now carries a stable data-* id
+    // + a Send-fix-order button (same handler as the Warnings panel).
+    rows = issues.map((i, idx) => {
+      const wid = `action::${i.level}::${idx}`;
+      const text = (i.icon === "⏳" && /Stale project status:/.test(i.text))
+        ? i.text // already pre-escaped below
+        : i.text;
+      // We can't reliably extract HTML-string text; send escaped plain text.
+      const plain = String(text).replace(/<[^>]+>/g, "");
+      return `<div class="action-row ${i.level}" data-action-id="${esc(wid)}" data-action-text="${esc(plain)}" data-action-source="00_company_os/action_required" data-action-level="${esc(i.level)}">
+        <span class="icon">${i.icon}</span> ${i.text}
+        <button class="fix-btn fix-btn-sm" onclick="sendActionOrder(this)" title="Send this issue to Thor as a fix order">Send fix order</button>
+      </div>`;
+    }).join("");
     const fails = issues.filter(i => i.level === "fail").length;
     const warns = issues.filter(i => i.level === "warn").length;
     if (hint) hint.textContent = `${issues.length} item(s) — ${fails} fail, ${warns} warn`;
@@ -1194,7 +1128,6 @@ function renderActionRequired(overview, tasks, provider, logs, projects) {
 // 3. Tasks — table or empty-state card
 // ============================================================
 function renderTasks(d) {
-  _tasksLastData = d;  // MC-TASKS-PAGER-1: pager arrows re-render from this
   const filterBar = `<div class="filter-bar">
     <span class="muted">View:</span>
     <button id="tasks-filter-real" class="filter-btn ${_tasksFilter==='real'?'active':''}" onclick="setTasksFilter('real')">Real only (…)</button>
@@ -1224,20 +1157,7 @@ function renderTasks(d) {
     return;
   }
 
-  // MC-TASKS-PAGER-1: most recent first, 10 per page.
-  const sorted = d.tasks.slice().sort((a, b) => {
-    const ta = Date.parse(a.updated || a.updated_at || "") || 0;
-    const tb = Date.parse(b.updated || b.updated_at || "") || 0;
-    return tb - ta;
-  });
-  const totalTasks = sorted.length;
-  const maxPage = Math.max(0, Math.ceil(totalTasks / TASKS_PAGE_SIZE) - 1);
-  if (_tasksPage > maxPage) _tasksPage = maxPage;
-  if (_tasksPage < 0) _tasksPage = 0;
-  const pageStart = _tasksPage * TASKS_PAGE_SIZE;
-  const pageTasks = sorted.slice(pageStart, pageStart + TASKS_PAGE_SIZE);
-
-  const rows = pageTasks.map(t => {
+  const rows = d.tasks.map(t => {
     const stCls = t.status === "done" ? "green" : t.status === "failed" || t.status === "blocked" ? "red" : t.status === "in-progress" ? "amber" : "gray";
     const prCls = t.priority === "P0" ? "red" : t.priority === "P1" ? "amber" : "gray";
     const blockedHtml = (t.status === "blocked" && t.blockers)
@@ -1260,17 +1180,9 @@ function renderTasks(d) {
     ? `<div class="demo-banner">⚠ ${demoCount} task(s) shown are <strong>local/demo</strong> data — see frontmatter <code>data_source: local-demo</code>. Replace with real task files when the agent system produces them.</div>`
     : "";
 
-  // MC-TASKS-PAGER-1: prev/next pager under the table.
-  const pagerHtml = totalTasks > TASKS_PAGE_SIZE ? `
-    <div class="tasks-pager">
-      <button class="filter-btn" onclick="tasksPageMove(-1)" ${_tasksPage === 0 ? "disabled" : ""}>← previous 10</button>
-      <span class="muted">${pageStart + 1}–${Math.min(pageStart + TASKS_PAGE_SIZE, totalTasks)} of ${totalTasks} · most recent first</span>
-      <button class="filter-btn" onclick="tasksPageMove(1)" ${_tasksPage >= maxPage ? "disabled" : ""}>next 10 →</button>
-    </div>` : "";
-
   $("#tasks").innerHTML = filterBar + demoBanner + `<table>
     <thead><tr><th class="id">ID</th><th>Title</th><th>Agent</th><th>Status</th><th>Priority</th><th>Blocked reason</th><th>Updated</th><th>Evidence</th></tr></thead>
-    <tbody>${rows}</tbody></table>` + pagerHtml;
+    <tbody>${rows}</tbody></table>`;
 
   const h = document.getElementById('tasks-hint');
   if (h) h.textContent = `${d.tasks.length} ${_tasksFilter}${demoCount > 0 ? ` (${demoCount} demo)` : ''}`;
@@ -1303,7 +1215,9 @@ function renderProjects(d) {
       <td>${esc(p.progress_pct)}</td>
       <td>${esc(p.next_action)}</td>
       <td>${blockerHtml}</td>
-      <td>${p.approval_needed ? badge("YES", "red") : badge("no", "gray")}</td>
+      <td>${p.approval_needed
+        ? `<button class="approve-btn" onclick="approveProject(this, '${esc(p.name || '')}')" title="Click to mark approval">${badge("YES", "red")}</button>`
+        : badge("no", "gray")}</td>
     </tr>`;
   }).join("");
   $("#projects").innerHTML = demoBanner + `<table>
@@ -1326,6 +1240,19 @@ function renderProjects(d) {
 function renderLogs(d) {
   const appCls = d.app_health === "ok" ? "green" : d.app_health === "degraded" ? "amber" : "gray";
   const apiCls = d.api_health === "ok" ? "green" : d.api_health === "degraded" ? "amber" : "gray";
+  const env = d.env || {};
+  const envKeys = Object.keys(env).filter(k => k !== "__env_file_present__");
+  const envHtml = envKeys.length === 0
+    ? `<span class="muted">no env vars tracked</span>`
+    : envKeys.map(k => {
+        const status = env[k];
+        const cls = status === "configured" ? "green" : status === "missing" ? "red" : "amber";
+        return `<div style="display:flex;gap:8px;align-items:center;margin:3px 0">
+          <span class="ts" style="min-width:240px">${esc(k)}</span>
+          ${badge(status, cls)}
+        </div>`;
+      }).join("");
+
   const summary = `
     <div class="health-grid">
       <div class="health-cell">
@@ -1350,15 +1277,37 @@ function renderLogs(d) {
           ? `<span class="ts">${esc(d.last_verification_rel)}</span> <span class="ts-iso">${esc(d.last_verification)}</span><br><span class="muted" style="font-size:10px">${esc(d.last_verification_source || "")}</span>`
           : `<span class="dash" title="no Argus verification log found">—</span>`}
       </div>
+      <div class="health-cell" style="grid-column:1 / -1">
+        <span class="muted">Environment</span>
+        ${envHtml}
+        ${env.__env_file_present__ === false
+          ? `<div class="muted" style="font-size:10px;margin-top:4px">.env file not present at .config/nofitech/.env</div>`
+          : ""}
+      </div>
     </div>
   `;
-  // MC-NO-LLM-CHECKS-1 (2026-07-10): the Environment cell (LLM API key /
-  // model env-var status + ".env not present" note) was removed per NOFI
-  // directive — the agents manage their own LLM config.
 
-  // MC-UI-CONSOLE-1: the "Recent activity" feed moved to its own panel in
-  // the right console column — see renderActivity() below.
+  // Recent activity (top 5)
   const events = d.events || [];
+  const recent = events.slice(0, 5);
+  let recentHtml = '';
+  if (recent.length === 0) {
+    const noEvents = (d.count === 0 && d.errors === 0 && d.warnings === 0);
+    const emptyText = noEvents ? "No logs available." : (d.reason || "No logs available.");
+    recentHtml = `<div class="empty">${esc(emptyText)}</div>`;
+  } else {
+    const items = recent.map(e => {
+      const cls = e.level === "error" ? "red" : e.level === "warn" ? "amber" : "gray";
+      const title = e.title || e.event_type || "—";
+      return `<div class="item">
+        <span class="ts">${esc(e.rel || "—")}</span>
+        <span>${badge(e.level || "info", cls)}</span>
+        <span class="actor">${esc(e.officer || "—")}</span>
+        <span>${esc(title)}</span>
+      </div>`;
+    }).join("");
+    recentHtml = `<div class="recent-list">${items}</div>`;
+  }
 
   // Full events (collapsible) — shows source paths
   let detailsHtml = '';
@@ -1383,7 +1332,7 @@ function renderLogs(d) {
       </details>`;
   }
 
-  $("#logs").innerHTML = summary + detailsHtml;
+  $("#logs").innerHTML = summary + recentHtml + detailsHtml;
 
   const h = document.getElementById('logs-hint');
   // Stage 18: read the warnings/errors counts from the unbounded lists
@@ -1391,34 +1340,6 @@ function renderLogs(d) {
   const wl = Array.isArray(d.warnings_list) ? d.warnings_list.length : 0;
   const el = Array.isArray(d.errors_list)   ? d.errors_list.length   : 0;
   if (h) h.textContent = `${d.count || events.length} event(s), ${el} err, ${wl} warn`;
-}
-
-// ============================================================
-// MC-UI-CONSOLE-1: Recent activity — its own panel in the right column
-// (was the top-5 list inside Logs/Health). Same events payload.
-// ============================================================
-function renderActivity(d) {
-  const el = $("#activity");
-  if (!el) return;
-  const events = (d && d.events) || [];
-  const recent = events.slice(0, 8);
-  if (recent.length === 0) {
-    el.innerHTML = `<div class="empty">${esc((d && d.reason) || "No events yet.")}</div>`;
-  } else {
-    const items = recent.map(e => {
-      const cls = e.level === "error" ? "red" : e.level === "warn" ? "amber" : "gray";
-      const title = e.title || e.event_type || "—";
-      return `<div class="item">
-        <span class="ts" title="${esc(e.ts || '')}">${esc(e.rel || "—")}</span>
-        <span>${badge(e.level || "info", cls)}</span>
-        <span class="actor">${esc(e.officer || "—")}</span>
-        <span>${esc(title)}</span>
-      </div>`;
-    }).join("");
-    el.innerHTML = `<div class="recent-list">${items}</div>`;
-  }
-  const h = document.getElementById('activity-hint');
-  if (h) h.textContent = recent.length ? `last ${recent.length} of ${events.length}` : "quiet";
 }
 
 // ============================================================
@@ -1528,9 +1449,6 @@ function _warningsRow(level, w, title) {
 //     Reuses .warnings-row patterns. Each row shows: order_id (mono),
 //     relative timestamp, source warning text, recommended fix,
 //     status pill (amber pending / blue in_progress), and requested_by.
-//     Buttons do NOT exist in this panel — orders are only acted on
-//     via chat confirmation ('Thor, do it' or 'Thor, execute
-//     pending order [id]'). Per NOFI directive 2026-06-11.
 // ============================================================
 function renderOrders(d) {
   const hint = document.getElementById('orders-hint');
@@ -1541,7 +1459,7 @@ function renderOrders(d) {
     const n = orders.length;
     hint.textContent = n === 0
       ? '0 pending'
-      : `${n} pending · awaiting chat confirmation`;
+      : `${n} pending · click Dispatch / Approve / Reject below`;
   }
   if (orders.length === 0) {
     root.innerHTML = `
@@ -1561,8 +1479,12 @@ function renderOrders(d) {
     const recFix = o.recommended_fix || '—';
     const requestedBy = o.requested_by || 'nofi';
     const orderId = o.order_id || '—';
+    // MC-FIX-ORDER-ACTIONS: each order row now carries Dispatch / Approve /
+    // Reject buttons so NOFI can act on orders without going through chat.
+    // Dispatch = send to Thor in_progress; Approve = green-fill + status=approved;
+    // Reject = grey-fill + status=rejected. All POST to /api/data/order/decision.
     return `
-      <div class="warnings-row warn" data-order-id="${esc(orderId)}">
+      <div class="warnings-row warn" data-order-id="${esc(orderId)}" data-order-status="${esc(status)}">
         <span class="meta">
           <div class="title-line">
             <span class="order-id">${esc(orderId)}</span>
@@ -1573,6 +1495,20 @@ function renderOrders(d) {
           <div class="sub-line" style="margin-top:4px"><b>Recommended fix:</b> ${esc(recFix)}</div>
         </span>
         <span class="requested-by" title="Requested by">by ${esc(requestedBy)}</span>
+        <span class="order-actions">
+          <button class="fix-btn dispatch-btn"
+                  data-decision="dispatch"
+                  onclick="decideOrder(this)"
+                  title="Dispatch to Thor (status=in_progress)">▶ Dispatch</button>
+          <button class="fix-btn approve-btn-order"
+                  data-decision="approve"
+                  onclick="decideOrder(this)"
+                  title="Approve (status=approved, fill green)">✓ Approve</button>
+          <button class="fix-btn reject-btn"
+                  data-decision="reject"
+                  onclick="decideOrder(this)"
+                  title="Reject (status=rejected, grey-fill)">✗ Reject</button>
+        </span>
       </div>`;
   }).join('');
 }
@@ -1610,6 +1546,71 @@ async function sendFixOrder(btn) {
     btn.textContent = "✗ failed — retry";
     setTimeout(() => { btn.textContent = origText; }, 2000);
   }
+}
+
+// MC-FIX-ORDER-ACTIONS: handler for Dispatch / Approve / Reject buttons
+// on pending-order rows. Updates the status pill + disables all decision
+// buttons in the same row to lock in the decision. POSTs to a
+// /api/data/order/decision endpoint if it exists; falls back to a
+// local-only state flip on 404 so the UI still reflects the decision.
+async function decideOrder(btn) {
+  if (!btn || btn.dataset.sent === "1") return;
+  const row = btn.closest(".warnings-row");
+  if (!row) return;
+  const decision = btn.dataset.decision || "dispatch";
+  const orderId = row.dataset.orderId || "";
+  const body = {
+    order_id: orderId,
+    decision,
+    ts: new Date().toISOString(),
+    requested_by: "nofi",
+  };
+  // Optimistic UI — disable all sibling decision buttons immediately.
+  row.querySelectorAll(".fix-btn").forEach(b => { b.disabled = true; });
+  const origText = btn.textContent;
+  btn.textContent = "…";
+  const statusPill = row.querySelector(".status-pill");
+  const STATUS_FOR = {
+    dispatch: ["in_progress", "in_progress"],
+    approve:  ["approved",    "approved"],
+    reject:   ["rejected",    "rejected"],
+  };
+  const [newStatus, newCls] = STATUS_FOR[decision] || ["dispatched", "in_progress"];
+  let endpointErr = null;
+  try {
+    const r = await authFetch("/api/data/order/decision", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    if (!r.ok && r.status !== 404) throw new Error(`HTTP ${r.status}`);
+    if (r.status === 404) endpointErr = "endpoint missing (local-only)";
+  } catch (e) {
+    endpointErr = String(e?.message || e);
+  }
+  // Update status pill + lock row.
+  if (statusPill) {
+    statusPill.classList.remove("pending", "in_progress");
+    statusPill.classList.add(newCls);
+    statusPill.textContent = newStatus;
+  }
+  row.dataset.orderStatus = newStatus;
+  row.classList.remove("warn");
+  row.classList.add("ok");
+  const verdict = ({
+    dispatch: "▶ Dispatched",
+    approve:  "✓ Approved",
+    reject:   "✗ Rejected",
+  })[decision] || decision;
+  btn.dataset.sent = "1";
+  btn.textContent = endpointErr ? `${verdict} (local)` : verdict;
+  // Stash a flash message so NOFI sees the outcome.
+  const flash = document.createElement("div");
+  flash.className = "order-decision-flash";
+  flash.textContent = endpointErr
+    ? `${verdict} (saved locally — backend endpoint not yet wired)`
+    : `${verdict} — recorded to events.jsonl`;
+  row.appendChild(flash);
+  setTimeout(() => flash.remove(), 4000);
 }
 
 // ============================================================
@@ -1736,7 +1737,7 @@ async function loadAll() {
   }));
 
   renderOverview(results.overview || {});
-  renderAgents(results.agents || {}, results.logs || {});
+  renderAgents(results.agents || {});
   renderActionRequired(
     results.overview || {},
     results.tasks    || {},
@@ -1747,16 +1748,12 @@ async function loadAll() {
   renderTasks(results.tasks || {});
   renderProjects(results.projects || {});
   renderLogs(results.logs || {});
-  // MC-UI-CONSOLE-1: recent-activity panel (right console column)
-  renderActivity(results.logs || {});
   // Stage 17: new Warnings panel — needs logs (events) and overview (breakdown)
   renderWarnings(results.logs || {}, results.overview || {});
   // Stage 19: Pending Orders panel — reads /api/data/orders
   renderOrders(results.orders || {});
   // Stage 20: GitHub Connection panel — reads /api/data/github
   renderGitHub(results.github || {});
-  // MC-UI-POLISH-1: sidebar mini-stats (same payloads, no extra fetch)
-  updateSidebarStats(results.overview || {}, results.logs || {});
 
   refreshTasksCounts().then(() => {
     if (results.tasks) renderTasks(results.tasks);
@@ -1777,6 +1774,10 @@ async function loadAll() {
       const note = v.lan_ip_auto ? "" : " (auto-detect failed)";
       lanEl.textContent = `LAN: http://${ip}:${port}/${note}`;
     }
+    if (results.provider?.providers) {
+      const paid = results.provider.providers.find(p => p.slot === "paid");
+      $("#foot-key").textContent = paid?.key_configured ? "API key: loaded" : "API key: not loaded";
+    }
   } catch {}
 
   // Last refreshed
@@ -1791,73 +1792,29 @@ async function loadAll() {
 // 10. Kanban — Multi-Agent Board removed in MC-KANBAN-MOVE-1 (2026-06-16).
 // See kanban.html for the standalone page; this file now only renders the main view.
 
-// ============================================================
-// MC-UI-POLISH-1 (2026-07-09): banner dismiss, scroll-spy, sidebar stats
-// ============================================================
-
-// Dismissible LAN banner — hidden per-browser via localStorage.
-function dismissLanWarning() {
-  try { localStorage.setItem("mc_lan_banner_dismissed", "1"); } catch {}
-  document.body.classList.add("lan-dismissed");
-}
-(function restoreLanDismiss() {
-  try {
-    if (localStorage.getItem("mc_lan_banner_dismissed") === "1") {
-      document.body.classList.add("lan-dismissed");
-    }
-  } catch {}
-})();
-
-// Scroll-spy: highlight the section currently in view in the sidebar
-// "On this page" nav. IntersectionObserver, no scroll-handler jank.
-(function wirePageNav() {
-  const nav = document.getElementById("page-nav");
-  if (!nav || !("IntersectionObserver" in window)) return;
-  const links = new Map();  // section id -> <a>
-  for (const a of nav.querySelectorAll("a[href^='#']")) {
-    links.set(a.getAttribute("href").slice(1), a);
+// Wire up the Token button on the main page
+(function wireTokenBtn() {
+  const btn = document.getElementById("token-btn");
+  if (!btn) return;
+  function update() {
+    if (getStoredToken()) { btn.textContent = "🔑 Token ✓"; btn.style.color = "var(--green)"; btn.style.borderColor = "var(--green)"; }
+    else { btn.textContent = "🔑 Token"; btn.style.color = "var(--text2)"; btn.style.borderColor = "var(--line)"; }
   }
-  let currentId = null;
-  const io = new IntersectionObserver((entries) => {
-    // Pick the topmost visible section.
-    const visible = entries.filter(e => e.isIntersecting)
-      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-    if (visible.length === 0) return;
-    const id = visible[0].target.id;
-    if (id === currentId) return;
-    currentId = id;
-    for (const [sid, a] of links) a.classList.toggle("current", sid === id);
-  }, { rootMargin: "-80px 0px -60% 0px" });
-  for (const sid of links.keys()) {
-    const sec = document.getElementById(sid);
-    if (sec) io.observe(sec);
-  }
+  btn.addEventListener("click", () => { promptForToken(); update(); });
+  update();
 })();
-
-// Live mini-stats in the sidebar footer — fed from the same overview
-// payload loadAll() already fetches (see updateSidebarStats call there).
-function updateSidebarStats(overview, logs) {
-  const el = document.getElementById("sidebar-stats");
-  if (!el) return;
-  const at = overview?.active_tasks?.value;
-  const ft = overview?.failed_tasks?.value;
-  const w  = overview?.warnings?.value;
-  const num = (v, cls) =>
-    `<span class="stat-num ${v > 0 ? cls : ''}">${(v === null || v === undefined) ? '—' : v}</span>`;
-  el.innerHTML =
-    `⚙ ${num(at, 'green')} active · ⚠ ${num(w, 'amber')} warn<br>` +
-    `✗ ${num(ft, 'red')} failed · 🩺 <span class="stat-num ${ (logs?.app_health === 'ok') ? 'green' : 'amber' }">${esc(logs?.app_health || '—')}</span>`;
-}
-
-// MC-NO-AUTH-1 (2026-07-10): the Token button was removed with the auth gate.
 
 loadAll();
-// MC-LIVE-REFRESH-1 (2026-06-18): auto-refresh every 5s.
-// MC-HEARTBEAT-HONEST-1 (2026-07-10): the viewer-side POST /api/heartbeat
-// {agent:"thor"} that used to run here is GONE — it made Thor show LIVE
-// whenever any browser tab had the dashboard open. Heartbeats now come
-// only from the real agent processes; the dashboard just reads.
-setInterval(loadAll, 5000);
+// MC-LIVE-REFRESH-1 (2026-06-18): auto-refresh every 5s. The footer text
+// used to say "auto-refresh: 30s" but there was no setInterval — the page
+// only refreshed on manual click. Fix: poll /api/data/* every 5s so the
+// agents panel + every other panel updates without page reload. The
+// heartbeat endpoint (POST /api/heartbeat) is pinged once per poll so a
+// viewer keeps the agent's "live" status fresh while looking at the page.
+setInterval(async () => {
+  try { await fetch("/api/heartbeat", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({agent: "thor"}) }); } catch {}
+  loadAll();
+}, 5000);
 
 // MC-CLOCK-1: live Dubai clock. Source of truth for all task timestamps.
 // Renders HH:MM:SS (24h, Dubai) + full date (weekday, day month year).
